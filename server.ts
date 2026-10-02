@@ -272,7 +272,7 @@ function seedInitialDatabase(): DatabaseSchema {
     try {
       const raw = fs.readFileSync(DB_PATH, 'utf-8');
       const parsed = JSON.parse(raw) as DatabaseSchema;
-      if (!parsed.settings.brandName) parsed.settings.brandName = 'TF OFFICIAL';
+      if (!parsed.settings.brandName) parsed.settings.brandName = 'TF FILE DOWNLOADER';
       if (typeof parsed.settings.heroBannerUrl !== 'string') parsed.settings.heroBannerUrl = '';
       if (typeof parsed.settings.heroIconUrl !== 'string') parsed.settings.heroIconUrl = '';
       if (!Array.isArray(parsed.settings.heroLinks)) {
@@ -331,7 +331,7 @@ function seedInitialDatabase(): DatabaseSchema {
           'সকল নতুন প্রিমিয়াম ও আনলকড প্রো অ্যাপস একদম ফ্রিতে ডাউনলোড করুন! কোনো অ্যাপ না পেলে "অ্যাপ রিকোয়েস্ট" বাটনে ক্লিক করে জানান — দ্রুত আপলোড করে দেওয়া হবে।';
       }
       if (typeof parsed.settings.downloadPinRequired !== 'boolean') {
-        parsed.settings.downloadPinRequired = true;
+        parsed.settings.downloadPinRequired = false;
       }
       if (typeof parsed.settings.defaultDownloadPin !== 'string' || !parsed.settings.defaultDownloadPin) {
         parsed.settings.defaultDownloadPin = '1234';
@@ -660,7 +660,7 @@ function seedInitialDatabase(): DatabaseSchema {
 
   const initialDb: DatabaseSchema = {
     settings: {
-      brandName: 'TF OFFICIAL',
+      brandName: 'TF FILE DOWNLOADER',
       brandLogoUrl: '',
       heroBannerUrl: '',
       heroIconUrl: '',
@@ -1636,9 +1636,9 @@ async function startServer() {
   app.use((req: Request, _res: Response, next: NextFunction) => {
     if (
       req.method === 'GET' &&
-      (req.path === '/tfadmin.com' ||
-        req.path === '/tfadmin' ||
-        req.path.startsWith('/tfadmin.com/'))
+      (req.path === '/admin780' ||
+        req.path === '/admin780/' ||
+        req.path.startsWith('/admin780/'))
     ) {
       req.url = '/';
     }

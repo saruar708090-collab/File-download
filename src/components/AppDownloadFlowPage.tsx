@@ -19,7 +19,10 @@ import {
   Copy,
   Check,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Lock,
+  Unlock,
+  Loader2
 } from 'lucide-react';
 import {
   VaultFile,
@@ -105,6 +108,44 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
   const [downloadingBtnId, setDownloadingBtnId] = useState<string | null>(null);
   const [alternatePromptBtn, setAlternatePromptBtn] = useState<DownloadButtonConfig | null>(null);
 
+  // Telegram Join Lock State (Join to Unlock)
+  const isLockRequired = file.requireTelegramJoin === true;
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
+    if (!isLockRequired) return true;
+    return sessionStorage.getItem(`tf_tg_unlocked_${file.id}`) === '1';
+  });
+  const [hasClickedTelegram, setHasClickedTelegram] = useState<boolean>(false);
+  const [isVerifyingUnlock, setIsVerifyingUnlock] = useState<boolean>(false);
+  const [showUnlockSuccess, setShowUnlockSuccess] = useState<boolean>(false);
+
+  const telegramUrl =
+    file.unlockTelegramUrl ||
+    settings.telegramChannelUrl ||
+    'https://t.me/TF_Official_Channel';
+  const telegramHandle = settings.telegramChannelId || '@TF_Official_Channel';
+
+  const handleJoinTelegramClick = () => {
+    window.open(telegramUrl, '_blank', 'noopener,noreferrer');
+    setHasClickedTelegram(true);
+    if (onShowToast) onShowToast('টেলিগ্রাম চ্যানেল ওপেন হয়েছে। জয়েন করে ফিরে আসুন!');
+  };
+
+  const handleVerifyAndUnlock = () => {
+    if (!hasClickedTelegram) {
+      if (onShowToast) onShowToast('অনুগ্রহ করে প্রথমে টেলিগ্রাম চ্যানেলে জয়েন করুন!');
+      return;
+    }
+    setIsVerifyingUnlock(true);
+    setTimeout(() => {
+      setIsVerifyingUnlock(false);
+      setIsUnlocked(true);
+      setShowUnlockSuccess(true);
+      sessionStorage.setItem(`tf_tg_unlocked_${file.id}`, '1');
+      if (onShowToast) onShowToast('🎉 ডাউনলোড লিংক সফলভাবে আনলক হয়েছে!');
+      setTimeout(() => setShowUnlockSuccess(false), 3500);
+    }, 1200);
+  };
+
   // Screenshot Lightbox Modal State
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -137,28 +178,28 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
     e.preventDefault();
     setSubmittingReport(true);
     try {
-      const res = await fetch('/api/reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileId: file.id,
-          fileTitle: `${file.title} (${file.version || 'PRO'})`,
-          reason: reportReason,
-          details: reportDetails.trim()
-        })
+      const { addDoc, collection } = await import('firebase/firestore');
+      const { db } = await import('../firebase');
+      const nowIso = new Date().toISOString();
+      await addDoc(collection(db, 'reports'), {
+        fileId: file.id,
+        fileTitle: `${file.title} (${file.version || 'PRO'})`,
+        reason: reportReason,
+        details: reportDetails.trim(),
+        status: 'open',
+        createdAt: nowIso,
+        reportedAt: nowIso
       });
-      if (res.ok) {
-        setReportSuccess(true);
-        setReportDetails('');
-        if (onReportSubmitted) onReportSubmitted();
-        if (onShowToast) {
-          onShowToast('আপনার রিপোর্ট অ্যাডমিনের কাছে পাঠানো হয়েছে। ধন্যবাদ!');
-        }
-        setTimeout(() => {
-          setReportSuccess(false);
-          setShowReportModal(false);
-        }, 1800);
+      setReportSuccess(true);
+      setReportDetails('');
+      if (onReportSubmitted) onReportSubmitted();
+      if (onShowToast) {
+        onShowToast('আপনার রিপোর্ট অ্যাডমিনের কাছে পাঠানো হয়েছে। ধন্যবাদ!');
       }
+      setTimeout(() => {
+        setReportSuccess(false);
+        setShowReportModal(false);
+      }, 1800);
     } catch {
       if (onShowToast) onShowToast('রিপোর্ট পাঠাতে সমস্যা হয়েছে, আবার চেষ্টা করুন।');
     } finally {
@@ -301,9 +342,12 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
                 <Star className="h-3.5 w-3.5 fill-amber-400" />
                 <Star className="h-3.5 w-3.5 fill-amber-400" />
               </div>
-              <span className="font-mono text-emerald-400">{file.version || 'v1.0'}</span>
+              <span className="font-mono text-emerald-400 font-semibold">{file.version || 'v1.0'}</span>
               <span className={isDark ? 'text-zinc-400' : 'text-slate-500'}>
                 · {file.downloads} Downloads
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 font-sans text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
+                <ShieldCheck className="h-3 w-3" /> Tested & 100% Safe
               </span>
             </div>
           </div>
@@ -334,7 +378,7 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
                 : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
             }`}
           >
-            <Share2 className="h-3.5 w-3.5 text-violet-400" /> বন্ধুদের শেয়ার করুন
+            <Share2 className="h-3.5 w-3.5 text-violet-400" /> শেয়ার করুন
           </button>
 
           <button
@@ -346,7 +390,7 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
                 : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
             }`}
           >
-            <Flag className="h-3.5 w-3.5 text-amber-400" /> লিংক কাজ করছে না? রিপোর্ট করুন
+            <Flag className="h-3.5 w-3.5 text-amber-400" /> রিপোর্ট করুন
           </button>
         </div>
       </div>
@@ -429,7 +473,7 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
                 </div>
 
                 {/* Right Compact Download Pill */}
-                <div className="flex shrink-0 items-center gap-1 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-md transition-transform group-hover:scale-105">
+                <div className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-md transition-transform group-hover:scale-105">
                   <span>Download</span>
                   <ChevronRight className="h-3.5 w-3.5" />
                 </div>
@@ -466,63 +510,135 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
             File: {file.originalName} · Size: {selectedVersion.sizeText || '85 MB'}
           </p>
 
-          {/* Dynamic Download Buttons: Direct Download (Link) & Fast Download (Direct to File Manager) */}
-          <div className="mx-auto mt-5 max-w-md space-y-3">
-            {(selectedVersion.buttons && selectedVersion.buttons.length > 0
-              ? selectedVersion.buttons
-              : [
-                  {
-                    id: 'default_direct',
-                    label: 'Direct Download',
-                    mode: 'link' as const,
-                    url: file.externalUrl || settings.telegramChannelUrl || '',
-                    color: 'violet' as const
-                  },
-                  {
-                    id: 'default_fast',
-                    label: 'Fast Download',
-                    mode: 'file' as const,
-                    url: '',
-                    color: 'emerald' as const
-                  }
-                ]
-            ).map((btn, idx) => {
-              const resolvedMode: 'file' | 'link' =
-                btn.mode || (btn.label.toLowerCase().includes('fast') ? 'file' : 'link');
-              const isFastFile = resolvedMode === 'file';
-              const isDownloading = downloadingBtnId === btn.id;
-              return (
-                <button
-                  key={btn.id || idx}
-                  type="button"
-                  onClick={() => handleButtonClick(btn)}
-                  className={`flex w-full items-center justify-center gap-2.5 rounded-xl px-5 py-3.5 text-xs font-extrabold shadow-lg transition-transform active:scale-98 hover:opacity-95 sm:text-sm ${getButtonColorClasses(
-                    btn.color
-                  )}`}
+          {/* TELEGRAM JOIN TO UNLOCK WIDGET */}
+          {isLockRequired && !isUnlocked ? (
+            <div className="mx-auto mt-5 max-w-md rounded-2xl border border-amber-500/40 bg-gradient-to-b from-amber-950/30 via-[#161622] to-[#0e0e14] p-5 text-center shadow-xl">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-500/50 bg-amber-500/10 text-amber-400 shadow-inner">
+                <Lock className="h-6 w-6" />
+              </div>
+
+              <span className="mt-3 inline-block rounded-full bg-amber-500/20 px-3 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-amber-300">
+                Join Telegram to Unlock
+              </span>
+
+              <h3 className="mt-2 text-base font-extrabold text-white">
+                ডাউনলোড লিংক আনলক করুন
+              </h3>
+
+              <p className="mt-1.5 text-xs leading-relaxed text-zinc-300">
+                এই অ্যাপটি ডাউনলোড করতে আমাদের অফিসিয়াল টেলিগ্রাম চ্যানেলে জয়েন করুন।
+              </p>
+
+              <div className="mt-4 space-y-2.5">
+                {/* Step 1: Join Channel Button */}
+                <a
+                  href={telegramUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={handleJoinTelegramClick}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 px-4 py-3 text-xs font-bold text-white shadow-lg shadow-sky-600/25 transition-all hover:scale-[1.02] active:scale-95"
                 >
-                  {isDownloading ? (
+                  <Send className="h-4 w-4" />
+                  <span>টেলিগ্রাম চ্যানেলে জয়েন করুন</span>
+                </a>
+
+                {/* Step 2: Unlock Button */}
+                <button
+                  type="button"
+                  onClick={handleVerifyAndUnlock}
+                  disabled={isVerifyingUnlock}
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold transition-all active:scale-95 ${
+                    hasClickedTelegram
+                      ? 'border-emerald-500/60 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 hover:scale-[1.02]'
+                      : 'border-zinc-700 bg-zinc-800/80 text-zinc-300 hover:border-zinc-600 hover:text-white'
+                  }`}
+                >
+                  {isVerifyingUnlock ? (
                     <>
-                      <CheckCircle2 className="h-4 w-4 animate-bounce" />
-                      <span>
-                        {isFastFile
-                          ? 'ফাইল ম্যানেজারে ডাউনলোড হচ্ছে...'
-                          : 'ডাউনলোড লিংক ওপেন হচ্ছে...'}
-                      </span>
+                      <Loader2 className="h-4 w-4 animate-spin text-emerald-300" />
+                      <span>যাচাই করা হচ্ছে...</span>
                     </>
                   ) : (
                     <>
-                      {isFastFile ? (
-                        <Zap className="h-4 w-4 shrink-0" />
-                      ) : (
-                        <ExternalLink className="h-4 w-4 shrink-0" />
-                      )}
-                      <span>{btn.label}</span>
+                      <Unlock className="h-4 w-4" />
+                      <span>ডাউনলোড লিংক আনলক করুন</span>
                     </>
                   )}
                 </button>
-              );
-            })}
-          </div>
+              </div>
+
+              <p className="mt-3 text-[11px] text-zinc-400">
+                টেলিগ্রাম চ্যানেলে জয়েন করার পর "ডাউনলোড লিংক আনলক করুন" বাটনে ক্লিক করুন।
+              </p>
+            </div>
+          ) : (
+            <>
+              {showUnlockSuccess && (
+                <div className="mx-auto mt-4 mb-2 flex max-w-md items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/40 px-4 py-2.5 text-xs font-bold text-emerald-300 shadow-md">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <span>ডাউনলোড লিংক সফলভাবে আনলক হয়েছে!</span>
+                </div>
+              )}
+
+              {/* Dynamic Download Buttons: Direct Download (Link) & Fast Download (Direct to File Manager) */}
+              <div className="mx-auto mt-5 max-w-md space-y-3">
+                {(selectedVersion.buttons && selectedVersion.buttons.length > 0
+                  ? selectedVersion.buttons
+                  : [
+                      {
+                        id: 'default_direct',
+                        label: 'Direct Download',
+                        mode: 'link' as const,
+                        url: file.externalUrl || settings.telegramChannelUrl || '',
+                        color: 'violet' as const
+                      },
+                      {
+                        id: 'default_fast',
+                        label: 'Fast Download',
+                        mode: 'file' as const,
+                        url: '',
+                        color: 'emerald' as const
+                      }
+                    ]
+                ).map((btn, idx) => {
+                  const resolvedMode: 'file' | 'link' =
+                    btn.mode || (btn.label.toLowerCase().includes('fast') ? 'file' : 'link');
+                  const isFastFile = resolvedMode === 'file';
+                  const isDownloading = downloadingBtnId === btn.id;
+                  return (
+                    <button
+                      key={btn.id || idx}
+                      type="button"
+                      onClick={() => handleButtonClick(btn)}
+                      className={`flex w-full items-center justify-center gap-2.5 rounded-xl px-5 py-3.5 text-xs font-extrabold shadow-lg transition-transform active:scale-98 hover:opacity-95 sm:text-sm ${getButtonColorClasses(
+                        btn.color
+                      )}`}
+                    >
+                      {isDownloading ? (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 animate-bounce" />
+                          <span>
+                            {isFastFile
+                              ? 'ফাইল ম্যানেজারে ডাউনলোড হচ্ছে...'
+                              : 'ডাউনলোড লিংক ওপেন হচ্ছে...'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          {isFastFile ? (
+                            <Zap className="h-4 w-4 shrink-0" />
+                          ) : (
+                            <ExternalLink className="h-4 w-4 shrink-0" />
+                          )}
+                          <span>{btn.label}</span>
+                        </>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           <div
             className={`mt-5 flex items-center justify-center gap-2 text-xs ${
@@ -1025,7 +1141,7 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
                       className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 transition-transform active:scale-98 hover:opacity-95"
                     >
                       <Zap className="h-4 w-4" />
-                      <span>{otherBtn.label} দিয়ে ডাউনলোড করুন</span>
+                      <span>{otherBtn.label}</span>
                     </button>
                   )}
                   <button

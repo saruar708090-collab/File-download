@@ -49,6 +49,8 @@ export interface VaultFile {
   versions?: AppVersionItem[];
   modFeatures?: string[];
   screenshots?: string[];
+  requireTelegramJoin?: boolean;
+  unlockTelegramUrl?: string;
 }
 
 export interface AppRequestItem {

@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "VaultFile": {
+      "title": "VaultFile",
+      "description": "Represents a file/app available for download.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "version": { "type": "string" },
+        "badge": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "uploadedAt": { "type": "string", "format": "date-time" },
+        "downloads": { "type": "integer" },
+        "isPinned": { "type": "boolean" },
+        "versions": { "type": "array" },
+        "modFeatures": { "type": "array" },
+        "screenshots": { "type": "array" }
+      },
+      "required": ["title", "uploadedAt"]
+    },
+    "AppRequest": {
+      "title": "AppRequest",
+      "description": "A user request for a specific app.",
+      "type": "object",
+      "properties": {
+        "appName": { "type": "string" },
+        "versionOrNote": { "type": "string" },
+        "requesterName": { "type": "string" },
+        "requestedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "uploaded", "rejected"] }
+      },
+      "required": ["appName", "requestedAt", "status"]
+    },
+    "BrokenLinkReport": {
+      "title": "BrokenLinkReport",
+      "description": "A report of a broken link.",
+      "type": "object",
+      "properties": {
+        "fileId": { "type": "string" },
+        "fileTitle": { "type": "string" },
+        "reason": { "type": "string" },
+        "reportedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["open", "fixed"] }
+      },
+      "required": ["fileId", "reportedAt", "status"]
+    },
+    "HubSettings": {
+      "title": "HubSettings",
+      "description": "Global settings for the TF Official hub.",
+      "type": "object",
+      "properties": {
+        "brandName": { "type": "string" },
+        "telegramChannelId": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "files/{fileId}": {
+      "schema": "VaultFile",
+      "description": "Publicly readable list of files."
+    },
+    "requests/{requestId}": {
+      "schema": "AppRequest",
+      "description": "User app requests."
+    },
+    "reports/{reportId}": {
+      "schema": "BrokenLinkReport",
+      "description": "Reports of broken links."
+    },
+    "settings/hub": {
+      "schema": "HubSettings",
+      "description": "Global configuration."
+    },
+    "admins/{adminId}": {
+      "schema": "object",
+      "description": "Admin whitelist."
+    }
+  }
+}

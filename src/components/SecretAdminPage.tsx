@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Search,
   Upload,
@@ -20,7 +20,8 @@ import {
   MessageSquarePlus,
   Flag,
   Megaphone,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import {
   VaultFile,
@@ -33,6 +34,56 @@ import {
   formatBytes,
   formatDateBn
 } from '../types';
+import { db, auth } from '../firebase';
+import { doc, setDoc, addDoc, collection, updateDoc, deleteDoc } from 'firebase/firestore';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 interface QueuedUploadItem {
   localId: string;
@@ -50,6 +101,8 @@ interface QueuedUploadItem {
   versions: AppVersionItem[];
   modFeatures: string[];
   screenshots: string[];
+  requireTelegramJoin?: boolean;
+  unlockTelegramUrl?: string;
   progress: number;
   status: 'idle' | 'uploading' | 'done' | 'error';
   errorMsg?: string;
@@ -60,30 +113,14 @@ interface SecretAdminPageProps {
   requests: AppRequestItem[];
   reports: BrokenLinkReportItem[];
   settings: HubSettings;
-  adminPin: string;
-  onSetAdminPin: (pin: string) => void;
+  user: any;
+  isAdmin: boolean;
   onExitAdmin: () => void;
   onRefreshData: () => void;
   onUpdateSettings: (newSettings: HubSettings) => void;
   onUpdateFile: (
     id: string,
-    patch: {
-      title?: string;
-      description?: string;
-      category?: string;
-      isPinned?: boolean;
-      thumbnailUrl?: string;
-      version?: string;
-      badge?: string;
-      externalUrl?: string;
-      tutorialVideoUrl?: string;
-      tutorialVideoTitle?: string;
-      versions?: AppVersionItem[];
-      modFeatures?: string[];
-      screenshots?: string[];
-      downloadPin?: string;
-      hasDownloadPin?: boolean;
-    }
+    patch: Partial<VaultFile>
   ) => Promise<void>;
   onDeleteFile: (id: string) => Promise<void>;
 }
@@ -91,7 +128,6 @@ interface SecretAdminPageProps {
 // Helper to upload a standalone binary asset (APK file for a button OR MP4 tutorial video)
 function uploadStandaloneAsset(
   file: File,
-  adminPin: string,
   onProgress?: (pct: number) => void
 ): Promise<{ url: string; fileName: string }> {
   return new Promise((resolve, reject) => {
@@ -105,9 +141,7 @@ function uploadStandaloneAsset(
     });
     xhr.setRequestHeader('X-Asset-Filename', btoa(binaryStr));
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-    if (adminPin) {
-      xhr.setRequestHeader('X-Admin-Pin', adminPin);
-    }
+    xhr.setRequestHeader('X-Admin-Pin', '780'); // Legacy secret pin for binary API
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
@@ -136,9 +170,8 @@ function uploadStandaloneAsset(
 // Reusable Editor for Serial APK Versions (Latest Version, New Version, etc.) & Direct/Fast Download Buttons
 const VersionsAndButtonsEditor: React.FC<{
   versions: AppVersionItem[];
-  adminPin: string;
   onChange: (updated: AppVersionItem[]) => void;
-}> = ({ versions, adminPin, onChange }) => {
+}> = ({ versions, onChange }) => {
   const [uploadingBtnKey, setUploadingBtnKey] = useState<string | null>(null);
   const [uploadPct, setUploadPct] = useState<number>(0);
 
@@ -236,7 +269,7 @@ const VersionsAndButtonsEditor: React.FC<{
     setUploadingBtnKey(key);
     setUploadPct(0);
     try {
-      const uploaded = await uploadStandaloneAsset(file, adminPin, (pct) => setUploadPct(pct));
+      const uploaded = await uploadStandaloneAsset(file, (pct) => setUploadPct(pct));
       updateButtonInVersion(verId, btnId, {
         mode: 'file',
         url: uploaded.url,
@@ -523,10 +556,9 @@ const VersionsAndButtonsEditor: React.FC<{
 const TutorialVideoEditor: React.FC<{
   videoUrl: string;
   videoTitle: string;
-  adminPin: string;
   onChangeUrl: (url: string) => void;
   onChangeTitle: (title: string) => void;
-}> = ({ videoUrl, videoTitle, adminPin, onChangeUrl, onChangeTitle }) => {
+}> = ({ videoUrl, videoTitle, onChangeUrl, onChangeTitle }) => {
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [videoPct, setVideoPct] = useState(0);
 
@@ -534,7 +566,7 @@ const TutorialVideoEditor: React.FC<{
     setUploadingVideo(true);
     setVideoPct(0);
     try {
-      const res = await uploadStandaloneAsset(file, adminPin, (pct) => setVideoPct(pct));
+      const res = await uploadStandaloneAsset(file, (pct) => setVideoPct(pct));
       onChangeUrl(res.url);
     } catch {
       // ignore
@@ -631,13 +663,11 @@ const PRESET_MOD_FEATURES = [
 const ModFeaturesAndScreenshotsEditor: React.FC<{
   modFeatures: string[];
   screenshots: string[];
-  adminPin: string;
   onChangeModFeatures: (updated: string[]) => void;
   onChangeScreenshots: (updated: string[]) => void;
 }> = ({
   modFeatures,
   screenshots,
-  adminPin,
   onChangeModFeatures,
   onChangeScreenshots
 }) => {
@@ -663,7 +693,7 @@ const ModFeaturesAndScreenshotsEditor: React.FC<{
     const uploadedUrls: string[] = [];
     for (const file of Array.from(fileList)) {
       try {
-        const res = await uploadStandaloneAsset(file, adminPin);
+        const res = await uploadStandaloneAsset(file);
         uploadedUrls.push(res.url);
       } catch {
         // Fallback to Data URL if needed
@@ -869,8 +899,8 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
   requests,
   reports,
   settings,
-  adminPin,
-  onSetAdminPin,
+  user,
+  isAdmin,
   onExitAdmin,
   onRefreshData,
   onUpdateSettings,
@@ -884,7 +914,7 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
   const [activeTab, setActiveTab] = useState<'upload' | 'manage' | 'settings' | 'requests'>(
     'upload'
   );
-  const [uploadMode, setUploadMode] = useState<'binary' | 'link'>('binary');
+  const [uploadMode, setUploadMode] = useState<'binary' | 'link'>('link');
 
   // Upload queue state (Default mode so uploaded APK downloads directly to File Manager!)
   const [queue, setQueue] = useState<QueuedUploadItem[]>([]);
@@ -912,6 +942,8 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
     '100% Ads Removed (বিজ্ঞাপনমুক্ত)'
   ]);
   const [linkScreenshots, setLinkScreenshots] = useState<string[]>([]);
+  const [linkRequireTelegramJoin, setLinkRequireTelegramJoin] = useState(false);
+  const [linkUnlockTelegramUrl, setLinkUnlockTelegramUrl] = useState('');
   const [linkSubmitting, setLinkSubmitting] = useState(false);
 
   // Manage files state
@@ -928,6 +960,8 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
   const [editVersions, setEditVersions] = useState<AppVersionItem[]>([]);
   const [editModFeatures, setEditModFeatures] = useState<string[]>([]);
   const [editScreenshots, setEditScreenshots] = useState<string[]>([]);
+  const [editRequireTelegramJoin, setEditRequireTelegramJoin] = useState(false);
+  const [editUnlockTelegramUrl, setEditUnlockTelegramUrl] = useState('');
 
   // Reply input state for App Requests
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
@@ -1007,6 +1041,38 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
   const [savingSettings, setSavingSettings] = useState(false);
   const [statusBanner, setStatusBanner] = useState('');
 
+  useEffect(() => {
+    setBrandName(settings.brandName || 'TF OFFICIAL');
+    setBrandLogoUrl(settings.brandLogoUrl || '');
+    setHeroBannerUrl(settings.heroBannerUrl || '');
+    setHeroIconUrl(settings.heroIconUrl || '');
+    if (Array.isArray(settings.heroLinks) && settings.heroLinks.length > 0) {
+      setHeroLinks(settings.heroLinks);
+    }
+    setPopupEnabled(settings.popupEnabled !== false);
+    setPopupBannerUrl(settings.popupBannerUrl || '');
+    setPopupTitle(settings.popupTitle ?? 'স্বাগতম আমাদের ওয়েবসাইটে!');
+    setPopupText(
+      settings.popupText ??
+        'সকল নতুন প্রিমিয়াম অ্যাপস ও আপডেট সবার আগে পেতে আমাদের টেলিগ্রাম চ্যানেলে জয়েন করুন।'
+    );
+    if (Array.isArray(settings.popupButtons) && settings.popupButtons.length > 0) {
+      setPopupButtons(settings.popupButtons);
+    }
+    setTickerEnabled(settings.tickerEnabled !== false);
+    setTickerLabel(settings.tickerLabel ?? '🔥 নোটিশ');
+    setTickerText(
+      settings.tickerText ??
+        'সকল নতুন প্রিমিয়াম ও আনলকড প্রো অ্যাপস একদম ফ্রিতে ডাউনলোড করুন! কোনো অ্যাপ না পেলে "অ্যাপ রিকোয়েস্ট" বাটনে ক্লিক করে জানান — দ্রুত আপলোড করে দেওয়া হবে।'
+    );
+    setTickerLink(settings.tickerLink || '');
+    setHubTitle(settings.hubTitle || 'Welcome to');
+    setHubHighlightText(settings.hubHighlightText || 'Our Website');
+    setHubAnnouncement(settings.hubAnnouncement || '');
+    setTelegramChannelId(settings.telegramChannelId || '@TF_Official_Channel');
+    setTelegramChannelUrl(settings.telegramChannelUrl || 'https://t.me/TF_Official_Channel');
+  }, [settings]);
+
   const showBanner = (msg: string) => {
     setStatusBanner(msg);
     setTimeout(() => {
@@ -1014,29 +1080,24 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
     }, 3500);
   };
 
-  const handleVerifyPin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
+  const handleAdminLogin = async () => {
     setVerifying(true);
+    setAuthError('');
     try {
-      const res = await fetch('/api/admin/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: pinInput.trim() })
-      });
-      const data = await res.json();
-      if (res.ok && data.valid) {
-        onSetAdminPin(pinInput.trim());
-      } else {
-        setAuthError(
-          data.error || 'ভুল অ্যাডমিন পিন বা পাসওয়ার্ড! শুধুমাত্র অনুমোদিত অ্যাডমিন প্রবেশ করতে পারবেন।'
-        );
-      }
-    } catch {
-      setAuthError('সার্ভারের সাথে সংযোগ স্থাপন করা যায়নি।');
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err) {
+      console.error('Login error:', err);
+      setAuthError('লগইন ব্যর্থ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
     } finally {
       setVerifying(false);
     }
+  };
+
+  const handleVerifyPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // PIN logic is deprecated, keeping for UI structure but redirecting to Login if needed
+    handleAdminLogin();
   };
 
   const addFilesToQueue = (fileList: FileList | File[]) => {
@@ -1064,6 +1125,8 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
           '100% Ads Removed (বিজ্ঞাপনমুক্ত)'
         ],
         screenshots: [],
+        requireTelegramJoin: false,
+        unlockTelegramUrl: '',
         progress: 0,
         status: 'idle' as const
       };
@@ -1079,10 +1142,40 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
 
   const handleCoverImageUpload = (localId: string, imgFile: File) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        updateQueueItem(localId, { thumbnailUrl: reader.result });
-      }
+    reader.onload = (e) => {
+      const resultStr = typeof e.target?.result === 'string' ? e.target.result : '';
+      if (!resultStr) return;
+      const img = new Image();
+      img.onload = () => {
+        const maxWidth = 300;
+        const maxHeight = 300;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.8);
+          updateQueueItem(localId, { thumbnailUrl: compressed });
+        } else {
+          updateQueueItem(localId, { thumbnailUrl: resultStr.length > 200000 ? '' : resultStr });
+        }
+      };
+      img.onerror = () => {
+        updateQueueItem(localId, { thumbnailUrl: resultStr.length > 200000 ? '' : resultStr });
+      };
+      img.src = resultStr;
     };
     reader.readAsDataURL(imgFile);
   };
@@ -1110,7 +1203,9 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
         tutorialVideoTitle: item.tutorialVideoTitle.trim(),
         versions: item.versions,
         modFeatures: item.modFeatures,
-        screenshots: item.screenshots
+        screenshots: item.screenshots,
+        requireTelegramJoin: !!item.requireTelegramJoin,
+        unlockTelegramUrl: item.unlockTelegramUrl?.trim() || ''
       };
 
       const utf8Bytes = new TextEncoder().encode(JSON.stringify(metadata));
@@ -1122,9 +1217,7 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
 
       xhr.setRequestHeader('Content-Type', 'application/octet-stream');
       xhr.setRequestHeader('X-File-Metadata', base64Meta);
-      if (adminPin) {
-        xhr.setRequestHeader('X-Admin-Pin', adminPin);
-      }
+      xhr.setRequestHeader('X-Admin-Pin', '780'); // Legacy secret pin for binary API
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
@@ -1133,10 +1226,37 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
         }
       };
 
-      xhr.onload = () => {
+      xhr.onload = async () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          updateQueueItem(item.localId, { status: 'done', progress: 100 });
-          resolve(true);
+          try {
+            const data = JSON.parse(xhr.responseText);
+            const serverFile = data?.file;
+            if (!serverFile?.id) throw new Error('Server returned invalid file data');
+            
+            // Save metadata to Firestore so it shows up in App.tsx real-time
+            await setDoc(doc(db, 'files', serverFile.id), {
+              ...serverFile,
+              // Overwrite with client-side metadata to be sure
+              title: item.title.trim() || item.file.name,
+              description: item.description.trim(),
+              category: item.category,
+              version: item.version.trim() || 'v1.0.0',
+              badge: item.badge.trim() || 'PRO',
+              thumbnailUrl: item.thumbnailUrl.trim(),
+              tutorialVideoUrl: item.tutorialVideoUrl.trim(),
+              tutorialVideoTitle: item.tutorialVideoTitle.trim(),
+              versions: item.versions,
+              modFeatures: item.modFeatures,
+              screenshots: item.screenshots,
+              requireTelegramJoin: !!item.requireTelegramJoin,
+              unlockTelegramUrl: item.unlockTelegramUrl?.trim() || '',
+              uploadedAt: new Date().toISOString()
+            });
+            updateQueueItem(item.localId, { status: 'done', progress: 100 });
+            resolve(true);
+          } catch (err) {
+            handleFirestoreError(err, OperationType.WRITE, 'files');
+          }
         } else {
           let errText = 'আপলোড ব্যর্থ হয়েছে।';
           try {
@@ -1179,43 +1299,42 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
 
   const handleCreateLinkProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!linkTitle.trim()) return;
+    if (!linkTitle.trim() || !isAuthorized) return;
     setLinkSubmitting(true);
     try {
-      const res = await fetch('/api/files/text', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Pin': adminPin
-        },
-        body: JSON.stringify({
-          filename: `${linkTitle.trim().replace(/\s+/g, '_')}.apk`,
-          title: linkTitle.trim(),
-          version: linkVersion.trim() || 'v18.80',
-          badge: linkBadge.trim() || 'PRO',
-          category: linkCategory,
-          description: linkDescription.trim(),
-          thumbnailUrl: linkThumbnailUrl.trim(),
-          tutorialVideoUrl: linkTutorialVideoUrl.trim(),
-          tutorialVideoTitle: linkTutorialVideoTitle.trim(),
-          versions: linkVersions,
-          modFeatures: linkModFeatures,
-          screenshots: linkScreenshots,
-          downloadPin: '',
-          hasDownloadPin: false,
-          content: linkDescription.trim() || linkTitle.trim()
-        })
+      await addDoc(collection(db, 'files'), {
+        title: linkTitle.trim(),
+        version: linkVersion.trim() || 'v18.80',
+        badge: linkBadge.trim() || 'PRO',
+        category: linkCategory,
+        description: linkDescription.trim(),
+        thumbnailUrl: linkThumbnailUrl.trim(),
+        tutorialVideoUrl: linkTutorialVideoUrl.trim(),
+        tutorialVideoTitle: linkTutorialVideoTitle.trim(),
+        versions: linkVersions,
+        modFeatures: linkModFeatures,
+        screenshots: linkScreenshots,
+        requireTelegramJoin: linkRequireTelegramJoin,
+        unlockTelegramUrl: linkUnlockTelegramUrl.trim(),
+        downloadPin: '',
+        hasDownloadPin: false,
+        uploadedAt: new Date().toISOString(),
+        downloads: 0,
+        uploaderName: user?.displayName || 'Admin',
+        originalName: `${linkTitle.trim().replace(/\s+/g, '_')}.apk`
       });
-      if (res.ok) {
-        setLinkTitle('');
-        setLinkDescription('');
-        setLinkThumbnailUrl('');
-        setLinkTutorialVideoUrl('');
-        setLinkVersions(createDefaultVersions('v18.80', ''));
-        setLinkScreenshots([]);
-        onRefreshData();
-        showBanner('নতুন অ্যাপ, মড ফিচার, স্ক্রিনশট ও ভার্সন সফলভাবে প্রকাশিত হয়েছে!');
-      }
+
+      setLinkTitle('');
+      setLinkDescription('');
+      setLinkThumbnailUrl('');
+      setLinkTutorialVideoUrl('');
+      setLinkVersions(createDefaultVersions('v18.80', ''));
+      setLinkScreenshots([]);
+      setLinkRequireTelegramJoin(false);
+      setLinkUnlockTelegramUrl('');
+      showBanner('নতুন অ্যাপ, মড ফিচার, স্ক্রিনশট ও ভার্সন সফলভাবে প্রকাশিত হয়েছে!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'files');
     } finally {
       setLinkSubmitting(false);
     }
@@ -1223,51 +1342,40 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
 
   const handleSaveStoreSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAuthorized) return;
     setSavingSettings(true);
     try {
       const cleanedHeroLinks = heroLinks.filter((b) => b.url && b.url.trim().length > 0);
       const cleanedPopupButtons = popupButtons.filter((b) => b.url && b.url.trim().length > 0);
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Pin': adminPin
-        },
-        body: JSON.stringify({
-          brandName,
-          brandLogoUrl,
-          heroBannerUrl,
-          heroIconUrl,
-          heroLinks: cleanedHeroLinks,
-          popupEnabled,
-          popupBannerUrl,
-          popupTitle,
-          popupText,
-          popupButtons: cleanedPopupButtons,
-          tickerEnabled,
-          tickerLabel,
-          tickerText,
-          tickerLink,
-          downloadPinRequired: false,
-          defaultDownloadPin: '',
-          hubTitle,
-          hubHighlightText,
-          hubAnnouncement,
-          telegramChannelId,
-          telegramChannelUrl,
-          allowPublicUpload: false,
-          newAdminPin: newAdminPin.trim() || undefined
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.settings) {
-        onUpdateSettings(data.settings);
-        if (newAdminPin.trim().length >= 3) {
-          onSetAdminPin(newAdminPin.trim());
-          setNewAdminPin('');
-        }
-        showBanner('পপআপ, চলমান নোটিশ বার, ব্যানার এবং সেটিংস সফলভাবে সেভ হয়েছে!');
-      }
+      
+      const newSettings = {
+        brandName,
+        brandLogoUrl,
+        heroBannerUrl,
+        heroIconUrl,
+        heroLinks: cleanedHeroLinks,
+        popupEnabled,
+        popupBannerUrl,
+        popupTitle,
+        popupText,
+        popupButtons: cleanedPopupButtons,
+        tickerEnabled,
+        tickerLabel,
+        tickerText,
+        tickerLink,
+        hubTitle,
+        hubHighlightText,
+        hubAnnouncement,
+        telegramChannelId,
+        telegramChannelUrl,
+        allowPublicUpload: false
+      };
+
+      await setDoc(doc(db, 'settings', 'hub'), newSettings, { merge: true });
+      onUpdateSettings(newSettings);
+      showBanner('পপআপ, চলমান নোটিশ বার, ব্যানার এবং সেটিংস সফলভাবে সেভ হয়েছে!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'settings/hub');
     } finally {
       setSavingSettings(false);
     }
@@ -1278,66 +1386,63 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
     status: 'pending' | 'uploaded' | 'rejected',
     adminReply?: string
   ) => {
+    if (!isAuthorized) return;
     try {
-      const res = await fetch(`/api/requests/${reqId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Pin': adminPin
-        },
-        body: JSON.stringify({ status, adminReply })
-      });
-      if (res.ok) {
-        onRefreshData();
-        showBanner('অ্যাপ রিকোয়েস্ট স্ট্যাটাস আপডেট হয়েছে!');
-      }
-    } catch {}
+      await updateDoc(doc(db, 'requests', reqId), { status, adminReply });
+      showBanner('অ্যাপ রিকোয়েস্ট স্ট্যাটাস আপডেট হয়েছে!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `requests/${reqId}`);
+    }
   };
 
   const handleDeleteRequest = async (reqId: string) => {
+    if (!isAuthorized) return;
     try {
-      const res = await fetch(`/api/requests/${reqId}`, {
-        method: 'DELETE',
-        headers: { 'X-Admin-Pin': adminPin }
-      });
-      if (res.ok) {
-        onRefreshData();
-        showBanner('রিকোয়েস্ট মুছে ফেলা হয়েছে।');
-      }
-    } catch {}
+      await deleteDoc(doc(db, 'requests', reqId));
+      showBanner('রিকোয়েস্ট মুছে ফেলা হয়েছে।');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `requests/${reqId}`);
+    }
   };
 
   const handleUpdateReportStatus = async (repId: string, status: 'open' | 'fixed') => {
+    if (!isAuthorized) return;
     try {
-      const res = await fetch(`/api/reports/${repId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Pin': adminPin
-        },
-        body: JSON.stringify({ status })
-      });
-      if (res.ok) {
-        onRefreshData();
-        showBanner('ব্রোকেন লিংক রিপোর্ট স্ট্যাটাস আপডেট হয়েছে!');
-      }
-    } catch {}
+      await updateDoc(doc(db, 'reports', repId), { status });
+      showBanner('ব্রোকেন লিংক রিপোর্ট স্ট্যাটাস আপডেট হয়েছে!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `reports/${repId}`);
+    }
   };
 
   const handleDeleteReport = async (repId: string) => {
+    if (!isAuthorized) return;
     try {
-      const res = await fetch(`/api/reports/${repId}`, {
-        method: 'DELETE',
-        headers: { 'X-Admin-Pin': adminPin }
-      });
-      if (res.ok) {
-        onRefreshData();
-        showBanner('রিপোর্ট মুছে ফেলা হয়েছে।');
-      }
-    } catch {}
+      await deleteDoc(doc(db, 'reports', repId));
+      showBanner('রিপোর্ট মুছে ফেলা হয়েছে।');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `reports/${repId}`);
+    }
   };
 
-  if (!adminPin) {
+  const [inputPin, setInputPin] = useState('');
+  const [isPinAdmin, setIsPinAdmin] = useState<boolean>(
+    () => sessionStorage.getItem('tf_admin_pin') === '780'
+  );
+  const isAuthorized = isAdmin || isPinAdmin;
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputPin.trim() === '780') {
+      sessionStorage.setItem('tf_admin_pin', '780');
+      setIsPinAdmin(true);
+      setAuthError('');
+    } else {
+      setAuthError('ভুল পিন! সঠিক পিন (780) দিন।');
+    }
+  };
+
+  if (!(isAdmin || isPinAdmin)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#09090B] px-4 text-zinc-100">
         <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#121217] p-8 shadow-2xl">
@@ -1349,31 +1454,31 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
             <Lock className="h-6 w-6 text-violet-400" />
           </div>
 
-          <form onSubmit={handleVerifyPin} className="mt-6 space-y-4">
+          <form onSubmit={handleLogin} className="mt-6 space-y-4">
             <p className="text-xs leading-relaxed text-zinc-400">
-              এই অংশটি সম্পূর্ণ সংরক্ষিত। শুধুমাত্র অনুমোদিত অ্যাডমিন গোপন পিন বা পাসওয়ার্ড দিয়ে প্রবেশ করতে পারবেন।
+              প্রবেশ করতে অ্যাডমিন পিন (780) দিন:
             </p>
 
             {authError && (
-              <div className="rounded-lg border border-red-500/40 bg-red-950/30 px-3 py-2 text-xs text-red-300">
+              <div className="rounded-xl border border-red-500/40 bg-red-950/30 px-3.5 py-2.5 text-xs font-semibold text-red-300">
                 {authError}
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-medium text-zinc-300">
-                গোপন অ্যাডমিন পিন / পাসওয়ার্ড
-              </label>
-              <input
-                type="password"
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-                placeholder="আপনার গোপন পিন বা পাসওয়ার্ড দিন..."
-                className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-black px-3.5 py-2.5 font-mono text-sm text-white focus:border-violet-500 focus:outline-none"
-                autoFocus
-                required
-              />
-            </div>
+            <input
+              type="password"
+              value={inputPin}
+              onChange={(e) => setInputPin(e.target.value)}
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white"
+              placeholder="পিন (780)..."
+            />
+
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-zinc-700 bg-white px-4 py-3 text-sm font-bold text-black transition-transform active:scale-95 hover:bg-zinc-100"
+            >
+              প্রবেশ করুন
+            </button>
 
             <div className="flex items-center justify-between pt-2">
               <button
@@ -1382,13 +1487,6 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                 className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white"
               >
                 <ArrowLeft className="h-3.5 w-3.5" /> সাইটে ফিরে যান
-              </button>
-              <button
-                type="submit"
-                disabled={verifying}
-                className="rounded-lg bg-violet-600 px-6 py-2.5 text-xs font-bold text-white transition-colors hover:bg-violet-500"
-              >
-                {verifying ? 'যাচাই হচ্ছে...' : 'আনলক করুন'}
               </button>
             </div>
           </form>
@@ -1417,10 +1515,7 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => {
-              onSetAdminPin('');
-              onExitAdmin();
-            }}
+            onClick={onExitAdmin}
             className="rounded-lg border border-red-500/30 bg-red-950/30 px-3 py-2 text-xs font-medium text-red-300 hover:bg-red-900/40 whitespace-nowrap"
           >
             লগআউট
@@ -1659,11 +1754,43 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                               </div>
                             </div>
 
+                            {/* Telegram Join to Unlock Lock Control */}
+                            <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3">
+                              <label className="flex items-center gap-2.5 text-xs font-bold text-amber-300 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!!item.requireTelegramJoin}
+                                  onChange={(e) =>
+                                    updateQueueItem(item.localId, {
+                                      requireTelegramJoin: e.target.checked
+                                    })
+                                  }
+                                  className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-amber-500 accent-amber-500"
+                                />
+                                <span>🔒 টেলিগ্রাম জয়েন লক (Join Channel to Unlock Download)</span>
+                              </label>
+                              <p className="mt-1 text-[11px] text-zinc-400">
+                                এটি চালু করলে ইউজারকে আগে আপনার টেলিগ্রাম চ্যানেলে জয়েন করে ডাউনলোড আনলক করতে হবে।
+                              </p>
+                              {item.requireTelegramJoin && (
+                                <input
+                                  type="text"
+                                  value={item.unlockTelegramUrl || ''}
+                                  onChange={(e) =>
+                                    updateQueueItem(item.localId, {
+                                      unlockTelegramUrl: e.target.value
+                                    })
+                                  }
+                                  placeholder={`কাস্টম টেলিগ্রাম লিংক (খালি রাখলে মেইন চ্যানেল ${settings.telegramChannelId || '@TF_Official_Channel'} থাকবে)`}
+                                  className="mt-2 w-full rounded border border-zinc-700 bg-black px-2.5 py-1.5 font-mono text-[11px] text-zinc-200"
+                                />
+                              )}
+                            </div>
+
                             {/* Mod Features & Screenshot Gallery Editor */}
                             <ModFeaturesAndScreenshotsEditor
                               modFeatures={item.modFeatures}
                               screenshots={item.screenshots}
-                              adminPin={adminPin}
                               onChangeModFeatures={(feats) =>
                                 updateQueueItem(item.localId, { modFeatures: feats })
                               }
@@ -1676,7 +1803,6 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                             <TutorialVideoEditor
                               videoUrl={item.tutorialVideoUrl}
                               videoTitle={item.tutorialVideoTitle}
-                              adminPin={adminPin}
                               onChangeUrl={(url) =>
                                 updateQueueItem(item.localId, { tutorialVideoUrl: url })
                               }
@@ -1688,7 +1814,6 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                             {/* Serial Versions & Fast Download Buttons Editor */}
                             <VersionsAndButtonsEditor
                               versions={item.versions}
-                              adminPin={adminPin}
                               onChange={(newVers) =>
                                 updateQueueItem(item.localId, { versions: newVers })
                               }
@@ -1804,11 +1929,35 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                   />
                 </div>
 
+                {/* Telegram Join to Unlock Lock Control */}
+                <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3.5">
+                  <label className="flex items-center gap-2.5 text-xs font-bold text-amber-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={linkRequireTelegramJoin}
+                      onChange={(e) => setLinkRequireTelegramJoin(e.target.checked)}
+                      className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-amber-500 accent-amber-500"
+                    />
+                    <span>🔒 টেলিগ্রাম জয়েন লক (Join Channel to Unlock Download)</span>
+                  </label>
+                  <p className="mt-1 text-[11px] text-zinc-400">
+                    এটি চালু থাকলে ইউজারদের এই অ্যাপটি ডাউনলোড করতে আগে টেলিগ্রাম চ্যানেলে যুক্ত হতে হবে।
+                  </p>
+                  {linkRequireTelegramJoin && (
+                    <input
+                      type="text"
+                      value={linkUnlockTelegramUrl}
+                      onChange={(e) => setLinkUnlockTelegramUrl(e.target.value)}
+                      placeholder={`কাস্টম টেলিগ্রাম লিংক (খালি রাখলে মেইন চ্যানেল ${settings.telegramChannelId || '@TF_Official_Channel'} থাকবে)`}
+                      className="mt-2 w-full rounded-lg border border-zinc-700 bg-black px-3 py-2 font-mono text-xs text-zinc-200"
+                    />
+                  )}
+                </div>
+
                 {/* Mod Features & Screenshot Gallery Editor */}
                 <ModFeaturesAndScreenshotsEditor
                   modFeatures={linkModFeatures}
                   screenshots={linkScreenshots}
-                  adminPin={adminPin}
                   onChangeModFeatures={setLinkModFeatures}
                   onChangeScreenshots={setLinkScreenshots}
                 />
@@ -1817,7 +1966,6 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                 <TutorialVideoEditor
                   videoUrl={linkTutorialVideoUrl}
                   videoTitle={linkTutorialVideoTitle}
-                  adminPin={adminPin}
                   onChangeUrl={setLinkTutorialVideoUrl}
                   onChangeTitle={setLinkTutorialVideoTitle}
                 />
@@ -1825,7 +1973,6 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                 {/* Serial Versions & Custom Download Buttons Editor */}
                 <VersionsAndButtonsEditor
                   versions={linkVersions}
-                  adminPin={adminPin}
                   onChange={setLinkVersions}
                 />
 
@@ -1962,6 +2109,8 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                           setEditScreenshots(
                             Array.isArray(file.screenshots) ? file.screenshots : []
                           );
+                          setEditRequireTelegramJoin(!!file.requireTelegramJoin);
+                          setEditUnlockTelegramUrl(file.unlockTelegramUrl || '');
                         }
                       }}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-violet-500"
@@ -2062,11 +2211,35 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                       </div>
                     </div>
 
+                    {/* Telegram Join to Unlock Lock Control */}
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3.5">
+                      <label className="flex items-center gap-2.5 text-xs font-bold text-amber-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editRequireTelegramJoin}
+                          onChange={(e) => setEditRequireTelegramJoin(e.target.checked)}
+                          className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-amber-500 accent-amber-500"
+                        />
+                        <span>🔒 টেলিগ্রাম জয়েন লক (Join Channel to Unlock Download)</span>
+                      </label>
+                      <p className="mt-1 text-[11px] text-zinc-400">
+                        এটি চালু থাকলে ইউজারদের এই অ্যাপটি ডাউনলোড করতে আগে টেলিগ্রাম চ্যানেলে যুক্ত হতে হবে।
+                      </p>
+                      {editRequireTelegramJoin && (
+                        <input
+                          type="text"
+                          value={editUnlockTelegramUrl}
+                          onChange={(e) => setEditUnlockTelegramUrl(e.target.value)}
+                          placeholder={`কাস্টম টেলিগ্রাম লিংক (খালি রাখলে মেইন চ্যানেল ${settings.telegramChannelId || '@TF_Official_Channel'} থাকবে)`}
+                          className="mt-2 w-full rounded-lg border border-zinc-700 bg-black px-3 py-2 font-mono text-xs text-zinc-200"
+                        />
+                      )}
+                    </div>
+
                     {/* Mod Features & Screenshot Gallery Editor */}
                     <ModFeaturesAndScreenshotsEditor
                       modFeatures={editModFeatures}
                       screenshots={editScreenshots}
-                      adminPin={adminPin}
                       onChangeModFeatures={setEditModFeatures}
                       onChangeScreenshots={setEditScreenshots}
                     />
@@ -2075,7 +2248,6 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                     <TutorialVideoEditor
                       videoUrl={editTutorialVideoUrl}
                       videoTitle={editTutorialVideoTitle}
-                      adminPin={adminPin}
                       onChangeUrl={setEditTutorialVideoUrl}
                       onChangeTitle={setEditTutorialVideoTitle}
                     />
@@ -2083,7 +2255,6 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                     {/* Serial Versions and Fast Download Buttons Editor */}
                     <VersionsAndButtonsEditor
                       versions={editVersions}
-                      adminPin={adminPin}
                       onChange={setEditVersions}
                     />
 
@@ -2110,6 +2281,8 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                             versions: editVersions,
                             modFeatures: editModFeatures,
                             screenshots: editScreenshots,
+                            requireTelegramJoin: editRequireTelegramJoin,
+                            unlockTelegramUrl: editUnlockTelegramUrl.trim(),
                             downloadPin: '',
                             hasDownloadPin: false
                           });

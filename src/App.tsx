@@ -29,22 +29,81 @@ import {
   formatDateBn,
   getFileExtension
 } from './types';
+import { auth, db } from './firebase';
+import { 
+  onAuthStateChanged, 
+  User, 
+  signOut 
+} from 'firebase/auth';
+import { 
+  onSnapshot, 
+  collection, 
+  query, 
+  orderBy, 
+  doc, 
+  updateDoc 
+} from 'firebase/firestore';
+
 import { AppDownloadFlowPage } from './components/AppDownloadFlowPage';
 import { SecretAdminPage } from './components/SecretAdminPage';
 
 function checkIsAdminRoute(): boolean {
-  const pathname = window.location.pathname.toLowerCase();
+  const pathname = window.location.pathname.toLowerCase().replace(/\/+$/, '');
   const hash = window.location.hash.toLowerCase();
   const search = window.location.search.toLowerCase();
-  const isSecret =
-    pathname.endsWith('/saruar_780780') ||
-    hash.includes('saruar_780780') ||
-    search.includes('saruar_780780');
+  return (
+    pathname.endsWith('/admin780') ||
+    hash === '#/admin780' ||
+    hash === '#admin780' ||
+    search.includes('admin780')
+  );
+}
 
-  if (isSecret && !sessionStorage.getItem('tf_admin_pin')) {
-    sessionStorage.setItem('tf_admin_pin', '780');
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
   }
-  return isSecret;
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
 }
 
 export default function App() {
@@ -54,7 +113,7 @@ export default function App() {
   const [requests, setRequests] = useState<AppRequestItem[]>([]);
   const [reports, setReports] = useState<BrokenLinkReportItem[]>([]);
   const [settings, setSettings] = useState<HubSettings>({
-    brandName: 'TF OFFICIAL',
+    brandName: 'TEAM FELCO FILE DOWNLOADER',
     brandLogoUrl: '',
     heroBannerUrl: '',
     heroIconUrl: '',
@@ -92,6 +151,9 @@ export default function App() {
     totalDownloads: 0
   });
   const [loading, setLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [showWelcomePopup, setShowWelcomePopup] = useState<boolean>(true);
   const [showNavMenu, setShowNavMenu] = useState<boolean>(false);
 
@@ -106,9 +168,11 @@ export default function App() {
   const [shareModalFile, setShareModalFile] = useState<VaultFile | null>(null);
   const [copiedCardShareLink, setCopiedCardShareLink] = useState<boolean>(false);
 
-  // Search state
+  // Search & Category filter state
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
   const searchTimerRef = useRef<number | null>(null);
 
   const triggerSearchFeedback = () => {
@@ -147,11 +211,202 @@ export default function App() {
 
   const [copiedTelegramId, setCopiedTelegramId] = useState<boolean>(false);
 
+  // Listen to browser URL changes (e.g. user enters /admin780 or navigates back)
+  useEffect(() => {
+    const handleUrlChange = () => {
+      setIsAdminRoute(checkIsAdminRoute());
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
+
+  // Connection Test
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        const { getDocFromServer } = await import('firebase/firestore');
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    };
+    testConnection();
+  }, []);
+
+  // Load data via Firebase Listeners
+  useEffect(() => {
+    setLoading(true);
+    setAuthLoading(true);
+
+    // 1. Auth Listener
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      // Simple logic: if user is logged in, consider them admin for this app's purpose
+      // OR you can add a specific check if needed.
+      setIsAdmin(!!u);
+      setAuthLoading(false);
+    });
+
+    // 2. Files Listener
+    let attemptedSeed = false;
+    const unsubFiles = onSnapshot(
+      collection(db, 'files'),
+      async (snap) => {
+        if (snap.empty && !attemptedSeed && localStorage.getItem('tf_firestore_seeded') !== '1') {
+          attemptedSeed = true;
+          try {
+            const res = await fetch('/api/files');
+            if (res.ok) {
+              const data = await res.json();
+              if (Array.isArray(data.files) && data.files.length > 0) {
+                const { setDoc } = await import('firebase/firestore');
+                localStorage.setItem('tf_firestore_seeded', '1');
+                for (const f of data.files) {
+                  try {
+                    const cleanFile = { ...f };
+                    // Guard against oversized documents (Firestore max is 1MB)
+                    if (typeof cleanFile.thumbnailUrl === 'string' && cleanFile.thumbnailUrl.length > 200000) {
+                      cleanFile.thumbnailUrl = '';
+                    }
+                    if (Array.isArray(cleanFile.screenshots)) {
+                      cleanFile.screenshots = cleanFile.screenshots.filter(
+                        (s: any) => typeof s === 'string' && s.length < 200000
+                      );
+                    }
+                    await setDoc(doc(db, 'files', f.id), cleanFile);
+                  } catch (docErr) {
+                    console.warn(`Could not seed file ${f.id}:`, docErr);
+                  }
+                }
+                return;
+              }
+            }
+          } catch (seedErr) {
+            console.error('Seed fallback error:', seedErr);
+          }
+        }
+
+        const list = snap.docs
+          .map((d) => ({ ...d.data(), id: d.id } as VaultFile))
+          .sort(
+            (a, b) =>
+              new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+          );
+        setFiles(list);
+
+        // Update stats
+        const totalFiles = list.length;
+        const totalDownloads = list.reduce((acc, f) => acc + (f.downloads || 0), 0);
+        const totalBytes = list.reduce((acc, f) => {
+          const match = f.version?.match(/([\d.]+)\s*MB/i);
+          return acc + (match ? parseFloat(match[1]) * 1024 * 1024 : 0);
+        }, 0);
+
+        setStats({
+          totalFiles,
+          totalDownloads,
+          totalBytes
+        });
+        setLoading(false);
+      },
+      (err) => {
+        setLoading(false);
+        handleFirestoreError(err, OperationType.LIST, 'files');
+      }
+    );
+
+    // 3. Requests Listener
+    const unsubReqs = onSnapshot(
+      collection(db, 'requests'),
+      (snap) => {
+        const list = snap.docs
+          .map((d) => {
+            const raw = d.data() as any;
+            return {
+              ...raw,
+              id: d.id,
+              createdAt: raw.createdAt || raw.requestedAt || new Date().toISOString()
+            } as AppRequestItem;
+          })
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+          );
+        setRequests(list);
+      },
+      (err) => {
+        handleFirestoreError(err, OperationType.LIST, 'requests');
+      }
+    );
+
+    // 4. Reports Listener
+    const unsubReports = onSnapshot(
+      collection(db, 'reports'),
+      (snap) => {
+        const list = snap.docs
+          .map((d) => {
+            const raw = d.data() as any;
+            return {
+              ...raw,
+              id: d.id,
+              createdAt: raw.createdAt || raw.reportedAt || new Date().toISOString()
+            } as BrokenLinkReportItem;
+          })
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+          );
+        setReports(list);
+      },
+      (err) => {
+        handleFirestoreError(err, OperationType.LIST, 'reports');
+      }
+    );
+
+    // 5. Settings Listener
+    const unsubSettings = onSnapshot(
+      doc(db, 'settings', 'hub'), 
+      (snap) => {
+        if (snap.exists()) {
+          setSettings(snap.data() as HubSettings);
+        }
+      },
+      (err) => {
+        handleFirestoreError(err, OperationType.GET, 'settings/hub');
+      }
+    );
+
+    return () => {
+      unsubAuth();
+      unsubFiles();
+      unsubReqs();
+      unsubReports();
+      unsubSettings();
+    };
+  }, []);
+
+
+  const handleAdminLogin = async () => {
+    // Simplified PIN login: Redirect to Admin Page and check PIN there
+    navigateToAdmin();
+  };
+
+  const handleAdminLogout = async () => {
+    exitAdminRoute();
+  };
+
+
   const navigateToAdmin = () => {
     try {
-      window.history.pushState({}, '', '/saruar_780780');
+      window.history.pushState({}, '', '/admin780');
     } catch {
-      window.location.hash = '#/saruar_780780';
+      window.location.hash = '#/admin780';
     }
     setIsAdminRoute(true);
   };
@@ -180,59 +435,27 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const fetchRepositoryData = async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const res = await fetch('/api/files');
-      if (!res.ok) throw new Error('Failed to load');
-      const data = await res.json();
-      setFiles(data.files || []);
-      if (Array.isArray(data.requests)) setRequests(data.requests);
-      if (Array.isArray(data.reports)) setReports(data.reports);
-      if (data.settings) setSettings(data.settings);
-      if (data.stats) setStats(data.stats);
-
-      const params = new URLSearchParams(window.location.search);
-      const linkedFileId = params.get('file');
-      if (linkedFileId && !activeFileId) {
-        const exists = (data.files || []).some((f: VaultFile) => f.id === linkedFileId);
-        if (exists) setActiveFileId(linkedFileId);
-      }
-    } catch {
-      // ignore
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchRepositoryData();
-  }, []);
-
   const handleSubmitAppRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reqAppName.trim()) return;
     setSubmittingRequest(true);
     try {
-      const res = await fetch('/api/requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          appName: reqAppName.trim(),
-          versionOrNote: reqVersionNote.trim(),
-          requesterName: reqUserName.trim() || 'ভিজিটর'
-        })
+      const { addDoc } = await import('firebase/firestore');
+      const nowIso = new Date().toISOString();
+      await addDoc(collection(db, 'requests'), {
+        appName: reqAppName.trim(),
+        versionOrNote: reqVersionNote.trim(),
+        requesterName: reqUserName.trim() || 'ভিজিটর',
+        createdAt: nowIso,
+        requestedAt: nowIso,
+        status: 'pending'
       });
-      const data = await res.json();
-      if (res.ok && Array.isArray(data.requests)) {
-        setRequests(data.requests);
-        setReqAppName('');
-        setReqVersionNote('');
-        showToast('আপনার অ্যাপ রিকোয়েস্ট সফলভাবে জমা হয়েছে!');
-        setShowRequestModal(false);
-      }
-    } catch {
-      showToast('রিকোয়েস্ট পাঠাতে সমস্যা হয়েছে।');
+      setReqAppName('');
+      setReqVersionNote('');
+      showToast('আপনার অ্যাপ রিকোয়েস্ট সফলভাবে জমা হয়েছে!');
+      setShowRequestModal(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'requests');
     } finally {
       setSubmittingRequest(false);
     }
@@ -240,64 +463,26 @@ export default function App() {
 
   const handleUpdateFile = async (
     id: string,
-    patch: {
-      title?: string;
-      description?: string;
-      category?: string;
-      isPinned?: boolean;
-      thumbnailUrl?: string;
-      version?: string;
-      badge?: string;
-      externalUrl?: string;
-      tutorialVideoUrl?: string;
-      tutorialVideoTitle?: string;
-      versions?: AppVersionItem[];
-      modFeatures?: string[];
-      screenshots?: string[];
-      downloadPin?: string;
-      hasDownloadPin?: boolean;
-    }
+    patch: any
   ) => {
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (adminPin) headers['X-Admin-Pin'] = adminPin;
-
-      const res = await fetch(`/api/files/${id}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify(patch)
-      });
-      const data = await res.json();
-      if (res.ok && data.file) {
-        setFiles((prev) => prev.map((f) => (f.id === id ? data.file : f)));
-        fetchRepositoryData(true);
-        showToast('সফলভাবে আপডেট করা হয়েছে।');
-      } else {
-        showToast(data.error || 'আপডেট করতে সমস্যা হয়েছে।');
-      }
-    } catch {
-      showToast('নেটওয়ার্ক ত্রুটি ঘটেছে।');
+      await updateDoc(doc(db, 'files', id), patch);
+      showToast('সফলভাবে আপডেট করা হয়েছে।');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `files/${id}`);
     }
   };
 
   const handleDeleteFile = async (id: string) => {
     try {
-      const headers: Record<string, string> = {};
-      if (adminPin) headers['X-Admin-Pin'] = adminPin;
-
-      const res = await fetch(`/api/files/${id}`, {
-        method: 'DELETE',
-        headers
-      });
-      if (res.ok) {
-        setFiles((prev) => prev.filter((f) => f.id !== id));
-        fetchRepositoryData(true);
-        showToast('ফাইলটি মুছে ফেলা হয়েছে।');
-      }
-    } catch {
-      showToast('নেটওয়ার্ক ত্রুটি ঘটেছে।');
+      const { deleteDoc } = await import('firebase/firestore');
+      await deleteDoc(doc(db, 'files', id));
+      showToast('ফাইলটি মুছে ফেলা হয়েছে।');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `files/${id}`);
     }
   };
+
 
   const triggerFileDownload = async (
     file: VaultFile,
@@ -305,6 +490,16 @@ export default function App() {
     customFileName?: string,
     mode?: 'file' | 'link'
   ) => {
+    // 1. Increment download count in Firestore
+    try {
+      await updateDoc(doc(db, 'files', file.id), {
+        downloads: (file.downloads || 0) + 1
+      });
+    } catch (err) {
+      console.error('Download count increment failed:', err);
+    }
+
+    // 2. Handle the actual download
     const finalFileName =
       customFileName ||
       file.originalName ||
@@ -312,41 +507,19 @@ export default function App() {
 
     const isFastFileDownload = mode === 'file';
 
-    const queryParts: string[] = [];
-    queryParts.push(`dlName=${encodeURIComponent(finalFileName)}`);
-    if (isFastFileDownload) {
-      queryParts.push('forceFile=1');
+    if (isFastFileDownload || (customUrl && !customUrl.trim().startsWith('http'))) {
+      // Use existing proxy route for file download (binary assets still served via server for simplicity)
+      // or if it's a direct firestore file path (not implemented yet, but keeping structure)
+      const qs = `dlName=${encodeURIComponent(finalFileName)}${isFastFileDownload ? '&forceFile=1' : ''}${customUrl ? `&targetUrl=${encodeURIComponent(customUrl)}` : ''}`;
+      window.open(`/api/files/${file.id}/download?${qs}`, '_blank');
+    } else if (customUrl) {
+      window.open(customUrl, '_blank');
     }
-    if (customUrl && customUrl.trim()) {
-      queryParts.push(`targetUrl=${encodeURIComponent(customUrl.trim())}`);
-    }
-    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
-    const url = `/api/files/${file.id}/download${qs}`;
 
-    const isExternalLinkMode =
-      !isFastFileDownload && Boolean(customUrl && customUrl.trim().startsWith('http'));
-
-    const a = document.createElement('a');
-    a.href = url;
-    if (!isExternalLinkMode) {
-      // Fast Download: Forces direct download into the user's File Manager / Downloads folder
-      a.download = finalFileName;
-    } else {
-      // Direct Download: Opens the external link configured on the button
-      a.target = '_blank';
-      a.rel = 'noreferrer';
-    }
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    setFiles((prev) =>
-      prev.map((f) => (f.id === file.id ? { ...f, downloads: (f.downloads || 0) + 1 } : f))
-    );
     showToast(
-      isExternalLinkMode
+      customUrl && customUrl.startsWith('http')
         ? 'ডাউনলোড লিংক ওপেন হয়েছে!'
-        : `"${finalFileName}" সরাসরি আপনার ফাইল ম্যানেজারে ডাউনলোড শুরু হয়েছে!`
+        : `"${finalFileName}" ডাউনলোড শুরু হয়েছে!`
     );
   };
 
@@ -358,30 +531,51 @@ export default function App() {
   };
 
   const handleSearchChange = (val: string) => {
-    const cleaned = val.trim().toLowerCase();
-    if (cleaned === 'saruar_780780' || cleaned === '/saruar_780780') {
-      setSearchQuery('');
-      navigateToAdmin();
-      return;
-    }
     setSearchQuery(val);
     triggerSearchFeedback();
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleaned = searchQuery.trim().toLowerCase();
-    if (cleaned === 'saruar_780780' || cleaned === '/saruar_780780') {
-      setSearchQuery('');
-      navigateToAdmin();
-      return;
-    }
     triggerSearchFeedback();
   };
 
   const filteredFiles = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const list = files.filter((file) => {
+      // Category Filter
+      if (selectedCategory !== 'All') {
+        const cat = (file.category || '').toLowerCase();
+        const title = file.title.toLowerCase();
+        if (selectedCategory === 'Video & Photo') {
+          const isMedia =
+            cat.includes('video') ||
+            cat.includes('photo') ||
+            cat.includes('media') ||
+            title.includes('video') ||
+            title.includes('photo') ||
+            title.includes('capcut') ||
+            title.includes('picsart') ||
+            title.includes('remini') ||
+            title.includes('lightroom') ||
+            title.includes('alight');
+          if (!isMedia) return false;
+        } else if (selectedCategory === 'Tools & Mods') {
+          const isTool =
+            cat.includes('tool') ||
+            cat.includes('utility') ||
+            cat.includes('app') ||
+            title.includes('pro') ||
+            title.includes('mod') ||
+            title.includes('vpn');
+          if (!isTool) return false;
+        } else if (selectedCategory === 'Top Popular') {
+          if ((file.downloads || 0) < 1 && !file.isPinned) return false;
+        } else if (file.category !== selectedCategory) {
+          return false;
+        }
+      }
+
       if (!q) return true;
       return (
         file.title.toLowerCase().includes(q) ||
@@ -395,7 +589,7 @@ export default function App() {
       if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       return new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime();
     });
-  }, [files, searchQuery]);
+  }, [files, searchQuery, selectedCategory]);
 
   const activeFile = useMemo(
     () => files.find((f) => f.id === activeFileId) || null,
@@ -410,10 +604,10 @@ export default function App() {
         requests={requests}
         reports={reports}
         settings={settings}
-        adminPin={adminPin}
-        onSetAdminPin={handleSaveAdminPin}
+        user={user}
+        isAdmin={isAdmin}
         onExitAdmin={exitAdminRoute}
-        onRefreshData={() => fetchRepositoryData(true)}
+        onRefreshData={() => {}} // No-op for real-time
         onUpdateSettings={(newSettings) => {
           setSettings(newSettings);
           if (newSettings.popupEnabled !== false) {
@@ -437,13 +631,13 @@ export default function App() {
       <header
         className={`sticky top-0 z-30 border-b backdrop-blur-md transition-colors ${
           isDark
-            ? 'border-zinc-800/80 bg-[#08080C]/90'
-            : 'border-slate-200/80 bg-white/90 shadow-xs'
+            ? 'border-zinc-800/80 bg-[#08080C]/95'
+            : 'border-slate-200 bg-white/95 shadow-xs'
         }`}
       >
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-3 py-2.5 sm:px-6 sm:py-3 w-full">
           {/* Left: Circular Brand Logo + Brand Name (No admin link exposed) */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 overflow-hidden">
             <a
               href="#top"
               onClick={(e) => {
@@ -451,19 +645,24 @@ export default function App() {
                 setActiveFileId(null);
                 setSearchQuery('');
               }}
-              className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-violet-600 to-cyan-500 font-extrabold text-sm text-white shadow-md transition-transform active:scale-95"
+              className="group relative flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-600 to-cyan-400 p-0.5 shadow-lg shadow-violet-600/25 transition-transform active:scale-95"
             >
-              {settings.brandLogoUrl ? (
-                <img
-                  src={settings.brandLogoUrl}
-                  alt={settings.brandName}
-                  referrerPolicy="no-referrer"
-                  className="h-full w-full rounded-full border-2 border-violet-500 object-cover"
-                />
-              ) : (
-                'TF'
-              )}
+              <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[14px] bg-[#09090D]">
+                {settings.brandLogoUrl ? (
+                  <img
+                    src={settings.brandLogoUrl}
+                    alt={settings.brandName}
+                    referrerPolicy="no-referrer"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="font-mono text-xs font-black text-white group-hover:scale-110 transition-transform">
+                    TF
+                  </span>
+                )}
+              </div>
             </a>
+
             <a
               href="#top"
               onClick={(e) => {
@@ -471,21 +670,27 @@ export default function App() {
                 setActiveFileId(null);
                 setSearchQuery('');
               }}
-              className="bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-400 bg-clip-text text-base font-extrabold tracking-wide text-transparent sm:text-lg uppercase"
+              className={`min-w-0 flex-1 truncate whitespace-nowrap text-[12px] min-[360px]:text-[13px] sm:text-base md:text-lg uppercase transition-colors select-none ${
+                isDark
+                  ? 'text-white drop-shadow-[0_1px_4px_rgba(255,255,255,0.2)]'
+                  : 'text-slate-950 drop-shadow-[0_1px_1px_rgba(0,0,0,0.12)]'
+              }`}
+              style={{ fontWeight: 900, wordSpacing: '0.14em', letterSpacing: '0.02em' }}
+              title={settings.brandName || 'TF FILE DOWNLOADER'}
             >
-              {settings.brandName || 'TF OFFICIAL'}
+              {settings.brandName || 'TF FILE DOWNLOADER'}
             </a>
           </div>
 
           {/* Right: Theme Toggle + Menu Icon Button at the very end */}
-          <div className="relative flex items-center gap-2">
+          <div className="relative flex shrink-0 items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => setIsDark((prev) => !prev)}
-              className={`flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
+              className={`flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full border transition-colors ${
                 isDark
                   ? 'border-zinc-800 bg-zinc-900 text-amber-400 hover:bg-zinc-800'
-                  : 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  : 'border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200'
               }`}
               title="থিম পরিবর্তন করুন"
             >
@@ -496,10 +701,10 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowNavMenu((prev) => !prev)}
-                className={`flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
+                className={`flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full border transition-colors ${
                   isDark
                     ? 'border-zinc-800 bg-zinc-900 text-violet-400 hover:bg-zinc-800'
-                    : 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    : 'border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200'
                 }`}
                 title="মেনু"
               >
@@ -508,7 +713,7 @@ export default function App() {
 
               {showNavMenu && (
                 <div
-                  className={`absolute right-0 mt-2 w-48 rounded-2xl border p-1.5 shadow-2xl z-50 ${
+                  className={`absolute right-0 mt-2 w-48 max-w-[calc(100vw-24px)] rounded-2xl border p-1.5 shadow-2xl z-50 ${
                     isDark ? 'border-zinc-800 bg-[#121217] text-white' : 'border-slate-200 bg-white text-slate-900'
                   }`}
                 >
@@ -599,7 +804,7 @@ export default function App() {
             onTriggerDownload={(f, customUrl, customFileName, mode) =>
               triggerFileDownload(f, customUrl, customFileName, mode)
             }
-            onReportSubmitted={() => fetchRepositoryData(true)}
+            onReportSubmitted={() => {}} // Real-time
             onShowToast={showToast}
           />
         </main>
@@ -607,21 +812,38 @@ export default function App() {
         /* Main Home Storefront Container */
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
           {/* Welcome Hero Section: 1. Welcome Text -> 2. Banner Below Welcome -> 3. Direct Link Buttons -> 4. Search Bar */}
-          <section className="text-center">
+          <section className="relative text-center pt-2 sm:pt-4">
+            {/* Ambient Background Glow behind Title */}
+            <div className="pointer-events-none absolute -top-12 left-1/2 -translate-x-1/2 h-36 w-80 sm:w-96 rounded-full bg-gradient-to-r from-violet-600/25 via-fuchsia-600/15 to-cyan-400/20 blur-3xl" />
+
+            {/* Micro Trust Badge above Title */}
+            <div className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 text-[11px] font-extrabold uppercase tracking-wider shadow-sm backdrop-blur-md mb-2.5 ${
+              isDark
+                ? 'border-violet-500/30 bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-indigo-500/10 text-violet-300'
+                : 'border-violet-300 bg-violet-50 text-violet-800'
+            }`}>
+              <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+              <span>OFFICIAL PRO APPS HUB</span>
+            </div>
+
             {/* 1. Customizable Welcome Heading & Subtitle at the Top */}
-            <h1 className="text-2xl font-extrabold tracking-tight sm:text-4xl">
-              <span className={isDark ? 'text-white' : 'text-slate-900'}>
+            <h1 className="text-2xl font-black tracking-tight sm:text-4xl lg:text-5xl text-balance">
+              <span className={isDark ? 'text-white drop-shadow-sm font-black' : 'text-slate-950 font-black'}>
                 {settings.hubTitle || 'Welcome to'}{' '}
               </span>
-              <span className="bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400 bg-clip-text text-transparent">
+              <span className={`font-black ${
+                isDark
+                  ? 'bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent drop-shadow-sm'
+                  : 'bg-gradient-to-r from-violet-600 via-purple-700 to-indigo-700 bg-clip-text text-transparent font-black'
+              }`}>
                 {settings.hubHighlightText || 'Our Website'}
               </span>
             </h1>
 
             {settings.hubAnnouncement && (
               <p
-                className={`mx-auto mt-2.5 max-w-lg text-xs leading-relaxed sm:text-sm ${
-                  isDark ? 'text-zinc-400' : 'text-slate-600'
+                className={`mx-auto mt-3 max-w-xl text-xs sm:text-sm leading-relaxed ${
+                  isDark ? 'text-zinc-300 font-medium' : 'text-slate-600'
                 }`}
               >
                 {settings.hubAnnouncement}
@@ -711,6 +933,8 @@ export default function App() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                 placeholder="Search for Apps....."
                 className={`w-full bg-transparent px-4 py-2.5 text-xs sm:text-sm focus:outline-none ${
                   isDark
@@ -718,6 +942,39 @@ export default function App() {
                     : 'text-slate-900 placeholder:text-slate-400'
                 }`}
               />
+
+              {/* Popular Tags Dropdown */}
+              {showSuggestions && !searchQuery && (
+                <div
+                  className={`absolute left-0 top-full mt-1.5 w-full rounded-xl border p-3 shadow-2xl z-50 ${
+                    isDark
+                      ? 'border-zinc-800 bg-[#121218] text-white'
+                      : 'border-slate-200 bg-white text-slate-900'
+                  }`}
+                >
+                  <p className="mb-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Popular Tags</p>
+                  <div className="flex flex-wrap gap-2">
+                    {['CapCut', 'Picsart', 'YouTube', 'Lightroom', 'Alight Motion'].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery(tag);
+                          handleSearchChange(tag);
+                          setShowSuggestions(false);
+                        }}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          isDark
+                            ? 'bg-zinc-800 text-zinc-300 hover:bg-violet-900 hover:text-white'
+                            : 'bg-slate-100 text-slate-700 hover:bg-violet-100 hover:text-violet-800'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {searchQuery && (
                 <button
@@ -777,16 +1034,43 @@ export default function App() {
                 )}
               </div>
             )}
+            {/* Interactive Category Filter Tabs */}
+            <div className="mt-5 flex items-center justify-start sm:justify-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              {[
+                { id: 'All', label: 'সকল অ্যাপস' },
+                { id: 'Top Popular', label: '🔥 পপুলার অ্যাপস' },
+                { id: 'Video & Photo', label: '🎬 ভিডিও ও ফটো এডিটর' },
+                { id: 'Tools & Mods', label: '⚡ প্রো টুলস ও মড' }
+              ].map((tab) => {
+                const isActive = selectedCategory === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setSelectedCategory(tab.id)}
+                    className={`whitespace-nowrap shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all active:scale-95 ${
+                      isActive
+                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-600/25'
+                        : isDark
+                        ? 'bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800 hover:text-white border border-zinc-800'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
           </section>
 
-          {/* 2-Column App Grid (এক সারিতে দুইটা এপস — কোনো ক্যাটাগরি ফিল্টার ছাড়াই সরাসরি অ্যাপস দেখাবে) */}
-          <section className="mt-6">
+          {/* 2-Column App Grid */}
+          <section className="mt-5">
             {loading ? (
               <div className="grid grid-cols-2 gap-3.5 sm:gap-5">
                 {[1, 2, 3, 4, 5, 6].map((n) => (
                   <div
                     key={n}
-                    className={`h-52 rounded-2xl border p-4 animate-pulse ${
+                    className={`h-56 rounded-2xl border p-4 animate-pulse ${
                       isDark ? 'border-zinc-800 bg-[#121218]' : 'border-slate-200 bg-white'
                     }`}
                   />
@@ -803,9 +1087,10 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     setSearchQuery('');
+                    setSelectedCategory('All');
                     triggerSearchFeedback();
                   }}
-                  className="mt-3 rounded-full bg-violet-600 px-4 py-1.5 text-xs font-bold text-white"
+                  className="mt-3 rounded-full bg-violet-600 px-4 py-1.5 text-xs font-bold text-white shadow-md hover:bg-violet-500 transition-colors"
                 >
                   সব অ্যাপ দেখুন
                 </button>
@@ -820,16 +1105,18 @@ export default function App() {
                   <div
                     key={file.id}
                     onClick={() => openAppDownloadPage(file.id)}
-                    className={`group relative flex cursor-pointer flex-col items-center rounded-2xl border p-4 pt-7 text-center transition-all duration-150 hover:-translate-y-0.5 sm:p-5 sm:pt-8 ${
+                    className={`group relative flex cursor-pointer flex-col items-center rounded-2xl border p-4 pt-7 text-center transition-all duration-200 hover:-translate-y-1 sm:p-5 sm:pt-8 ${
                       isDark
-                        ? 'border-zinc-800/90 bg-[#121218] hover:border-violet-500/60 shadow-lg shadow-black/40'
-                        : 'border-slate-200/80 bg-white hover:border-violet-400 shadow-sm'
+                        ? 'border-zinc-800/90 bg-[#121218] hover:border-violet-500/50 shadow-lg shadow-black/40 hover:shadow-violet-950/20'
+                        : 'border-slate-200/80 bg-white hover:border-violet-400 shadow-sm hover:shadow-md'
                     }`}
                   >
                     {/* Top-Left Green PRO Badge */}
-                    <span className="absolute left-3 top-3 rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-xs">
-                      {file.badge || 'PRO'}
-                    </span>
+                    <div className="absolute left-3 top-3 flex items-center gap-1.5">
+                      <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-xs">
+                        {file.badge || 'PRO'}
+                      </span>
+                    </div>
 
                     {/* Top-Right Quick Share Icon */}
                     <div className="absolute right-2.5 top-2.5 flex items-center gap-1">
@@ -911,14 +1198,14 @@ export default function App() {
                       <span>{file.downloads}</span>
                     </div>
 
-                    {/* Download Button -> Opens Serial Version Selection Page */}
+                    {/* Download Button */}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         openAppDownloadPage(file.id);
                       }}
-                      className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-2 text-xs font-bold text-white shadow-xs transition-opacity hover:opacity-95 sm:py-2.5"
+                      className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-2 text-xs font-bold text-white shadow-md shadow-violet-600/20 transition-all hover:scale-[1.02] active:scale-95 sm:py-2.5"
                     >
                       <Download className="h-3.5 w-3.5" /> Download
                     </button>
@@ -1124,7 +1411,7 @@ export default function App() {
                           : 'border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      বন্ধ করুন / সাইটে প্রবেশ করুন
+                      প্রবেশ করুন
                     </button>
                   </div>
                 );
