@@ -103,6 +103,7 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
   // non-null = Step 2 (Fast Download / Direct Download to File Manager)
   const [selectedVersion, setSelectedVersion] = useState<AppVersionItem | null>(null);
   const [downloadingBtnId, setDownloadingBtnId] = useState<string | null>(null);
+  const [alternatePromptBtn, setAlternatePromptBtn] = useState<DownloadButtonConfig | null>(null);
 
   // Screenshot Lightbox Modal State
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -180,6 +181,10 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
   };
 
   const handleButtonClick = (btn: DownloadButtonConfig) => {
+    if (btn.isDisabled) {
+      setAlternatePromptBtn(btn);
+      return;
+    }
     setDownloadingBtnId(btn.id);
     const resolvedMode: 'file' | 'link' =
       btn.mode || (btn.label.toLowerCase().includes('fast') ? 'file' : 'link');
@@ -530,6 +535,53 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
         </div>
       )}
 
+      {/* HOW TO USE VIDEO TUTORIAL SECTION (একটা এপস এর ভিতর কিভাবে ব্যবহার করবে ভিডিও) */}
+      {file.tutorialVideoUrl && (
+        <div
+          className={`mt-4 rounded-2xl border p-4 sm:p-6 ${
+            isDark
+              ? 'border-zinc-800 bg-[#121218] shadow-xl shadow-black/50'
+              : 'border-slate-200 bg-white shadow-sm'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <PlayCircle className="h-5 w-5 text-emerald-400" />
+            <h3
+              className={`text-sm font-extrabold sm:text-base ${
+                isDark ? 'text-white' : 'text-slate-900'
+              }`}
+            >
+              {file.tutorialVideoTitle ||
+                'অ্যাপটি কিভাবে ইনস্টল ও ব্যবহার করবেন দেখুন (Video Tutorial)'}
+            </h3>
+          </div>
+
+          <div className="mt-3 overflow-hidden rounded-xl border border-zinc-800 bg-black">
+            {ytEmbedUrl ? (
+              <div className="relative aspect-video w-full">
+                <iframe
+                  src={ytEmbedUrl}
+                  title={file.tutorialVideoTitle || file.title}
+                  className="h-full w-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              <video
+                src={file.tutorialVideoUrl}
+                controls
+                playsInline
+                preload="metadata"
+                className="max-h-[420px] w-full bg-black object-contain"
+              >
+                আপনার ব্রাউজার ভিডিও প্লে সাপোর্ট করে না।
+              </video>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* MOD FEATURES LIST SECTION (মড ও আনলকড প্রিমিয়াম ফিচার লিস্ট) */}
       {modFeatures.length > 0 && (
         <div
@@ -618,53 +670,6 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
                 </div>
               </button>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* HOW TO USE VIDEO TUTORIAL SECTION (একটা এপস এর ভিতর কিভাবে ব্যবহার করবে ভিডিও) */}
-      {file.tutorialVideoUrl && (
-        <div
-          className={`mt-4 rounded-2xl border p-4 sm:p-6 ${
-            isDark
-              ? 'border-zinc-800 bg-[#121218] shadow-xl shadow-black/50'
-              : 'border-slate-200 bg-white shadow-sm'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <PlayCircle className="h-5 w-5 text-emerald-400" />
-            <h3
-              className={`text-sm font-extrabold sm:text-base ${
-                isDark ? 'text-white' : 'text-slate-900'
-              }`}
-            >
-              {file.tutorialVideoTitle ||
-                'অ্যাপটি কিভাবে ইনস্টল ও ব্যবহার করবেন দেখুন (Video Tutorial)'}
-            </h3>
-          </div>
-
-          <div className="mt-3 overflow-hidden rounded-xl border border-zinc-800 bg-black">
-            {ytEmbedUrl ? (
-              <div className="relative aspect-video w-full">
-                <iframe
-                  src={ytEmbedUrl}
-                  title={file.tutorialVideoTitle || file.title}
-                  className="h-full w-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            ) : (
-              <video
-                src={file.tutorialVideoUrl}
-                controls
-                playsInline
-                preload="metadata"
-                className="max-h-[420px] w-full bg-black object-contain"
-              >
-                আপনার ব্রাউজার ভিডিও প্লে সাপোর্ট করে না।
-              </video>
-            )}
           </div>
         </div>
       )}
@@ -964,6 +969,79 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Alternative Download Suggestion Modal ("অন্যটি চেষ্টা করতে বলবে") */}
+      {alternatePromptBtn && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs"
+          onClick={() => setAlternatePromptBtn(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`relative w-full max-w-sm rounded-2xl border p-5 sm:p-6 text-center shadow-2xl ${
+              isDark
+                ? 'border-amber-500/40 bg-[#121218] text-white shadow-black/80'
+                : 'border-slate-200 bg-white text-slate-900 shadow-slate-900/10'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setAlternatePromptBtn(null)}
+              className="absolute right-3.5 top-3.5 rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+
+            <h3 className="mt-3 text-base font-extrabold">
+              {alternatePromptBtn.label} বন্ধ আছে
+            </h3>
+
+            <p className={`mt-2 text-xs leading-relaxed ${isDark ? 'text-zinc-300' : 'text-slate-600'}`}>
+              {alternatePromptBtn.disabledMessage ||
+                'এই ডাউনলোড অপশনটি সাময়িকভাবে বন্ধ আছে। অনুগ্রহ করে অন্য ডাউনলোড বাটনটি ব্যবহার করুন!'}
+            </p>
+
+            {(() => {
+              const otherBtn = (selectedVersion?.buttons || []).find(
+                (b) => b.id !== alternatePromptBtn.id && !b.isDisabled
+              );
+              return (
+                <div className="mt-5 space-y-2">
+                  {otherBtn && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = otherBtn;
+                        setAlternatePromptBtn(null);
+                        handleButtonClick(target);
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 transition-transform active:scale-98 hover:opacity-95"
+                    >
+                      <Zap className="h-4 w-4" />
+                      <span>{otherBtn.label} দিয়ে ডাউনলোড করুন</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAlternatePromptBtn(null)}
+                    className={`w-full rounded-xl border py-2.5 text-xs font-semibold transition-colors ${
+                      isDark
+                        ? 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                        : 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    বন্ধ করুন
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

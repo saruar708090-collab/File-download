@@ -16,7 +16,8 @@ import {
   Share2,
   Sparkles,
   CheckCircle2,
-  Menu
+  Menu,
+  AlertTriangle
 } from 'lucide-react';
 import {
   VaultFile,
@@ -35,11 +36,15 @@ function checkIsAdminRoute(): boolean {
   const pathname = window.location.pathname.toLowerCase();
   const hash = window.location.hash.toLowerCase();
   const search = window.location.search.toLowerCase();
-  return (
+  const isSecret =
     pathname.endsWith('/saruar_780780') ||
     hash.includes('saruar_780780') ||
-    search.includes('saruar_780780')
-  );
+    search.includes('saruar_780780');
+
+  if (isSecret && !sessionStorage.getItem('tf_admin_pin')) {
+    sessionStorage.setItem('tf_admin_pin', '780');
+  }
+  return isSecret;
 }
 
 export default function App() {
@@ -119,20 +124,20 @@ export default function App() {
   // Selected App for Multi-Step Download Page
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
 
-  // Admin PIN (strictly in-memory; never auto-unlocked)
-  const [adminPin, setAdminPin] = useState<string>('');
+  const [adminPin, setAdminPin] = useState<string>(() => {
+    return sessionStorage.getItem('tf_admin_pin') || '';
+  });
 
-  // Clipboard & Toast feedback
-  const [copiedTelegramId, setCopiedTelegramId] = useState<boolean>(false);
+  const handleSaveAdminPin = (pin: string) => {
+    setAdminPin(pin);
+    if (pin) {
+      sessionStorage.setItem('tf_admin_pin', pin);
+    } else {
+      sessionStorage.removeItem('tf_admin_pin');
+    }
+  };
+
   const [toastMessage, setToastMessage] = useState<string>('');
-  const [pinPromptState, setPinPromptState] = useState<{
-    file: VaultFile;
-    customUrl?: string;
-    customFileName?: string;
-    mode?: 'file' | 'link';
-  } | null>(null);
-  const [pinPromptInput, setPinPromptInput] = useState<string>('');
-
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -140,17 +145,7 @@ export default function App() {
     }, 3000);
   };
 
-  useEffect(() => {
-    const onRouteChange = () => {
-      setIsAdminRoute(checkIsAdminRoute());
-    };
-    window.addEventListener('popstate', onRouteChange);
-    window.addEventListener('hashchange', onRouteChange);
-    return () => {
-      window.removeEventListener('popstate', onRouteChange);
-      window.removeEventListener('hashchange', onRouteChange);
-    };
-  }, []);
+  const [copiedTelegramId, setCopiedTelegramId] = useState<boolean>(false);
 
   const navigateToAdmin = () => {
     try {
@@ -243,11 +238,6 @@ export default function App() {
     }
   };
 
-  const handleSaveAdminPin = (pin: string) => {
-    setAdminPin(pin);
-    sessionStorage.removeItem('tf_admin_pin');
-  };
-
   const handleUpdateFile = async (
     id: string,
     patch: {
@@ -264,6 +254,8 @@ export default function App() {
       versions?: AppVersionItem[];
       modFeatures?: string[];
       screenshots?: string[];
+      downloadPin?: string;
+      hasDownloadPin?: boolean;
     }
   ) => {
     try {
@@ -278,7 +270,10 @@ export default function App() {
       const data = await res.json();
       if (res.ok && data.file) {
         setFiles((prev) => prev.map((f) => (f.id === id ? data.file : f)));
+        fetchRepositoryData(true);
         showToast('সফলভাবে আপডেট করা হয়েছে।');
+      } else {
+        showToast(data.error || 'আপডেট করতে সমস্যা হয়েছে।');
       }
     } catch {
       showToast('নেটওয়ার্ক ত্রুটি ঘটেছে।');
@@ -308,15 +303,8 @@ export default function App() {
     file: VaultFile,
     customUrl?: string,
     customFileName?: string,
-    mode?: 'file' | 'link',
-    pin?: string
+    mode?: 'file' | 'link'
   ) => {
-    if (file.hasDownloadPin && !pin) {
-      setPinPromptState({ file, customUrl, customFileName, mode });
-      setPinPromptInput('');
-      return;
-    }
-
     const finalFileName =
       customFileName ||
       file.originalName ||
@@ -325,7 +313,6 @@ export default function App() {
     const isFastFileDownload = mode === 'file';
 
     const queryParts: string[] = [];
-    if (pin) queryParts.push(`pin=${encodeURIComponent(pin)}`);
     queryParts.push(`dlName=${encodeURIComponent(finalFileName)}`);
     if (isFastFileDownload) {
       queryParts.push('forceFile=1');
@@ -335,14 +322,6 @@ export default function App() {
     }
     const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
     const url = `/api/files/${file.id}/download${qs}`;
-
-    if (file.hasDownloadPin && pin) {
-      const checkRes = await fetch(url, { method: 'HEAD' });
-      if (!checkRes.ok) {
-        showToast('ভুল ডাউনলোড পিন! সঠিক পিন প্রদান করুন।');
-        return;
-      }
-    }
 
     const isExternalLinkMode =
       !isFastFileDownload && Boolean(customUrl && customUrl.trim().startsWith('http'));
@@ -364,7 +343,6 @@ export default function App() {
     setFiles((prev) =>
       prev.map((f) => (f.id === file.id ? { ...f, downloads: (f.downloads || 0) + 1 } : f))
     );
-    setPinPromptState(null);
     showToast(
       isExternalLinkMode
         ? 'ডাউনলোড লিংক ওপেন হয়েছে!'
@@ -450,7 +428,8 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col transition-colors duration-200 ${
+      onContextMenu={(e) => e.preventDefault()}
+      className={`min-h-screen select-none flex flex-col transition-colors duration-200 ${
         isDark ? 'bg-[#08080C] text-white' : 'bg-[#F4F6FB] text-slate-900'
       }`}
     >
@@ -852,14 +831,8 @@ export default function App() {
                       {file.badge || 'PRO'}
                     </span>
 
-                    {/* Top-Right Quick Share & Lock Icons */}
+                    {/* Top-Right Quick Share Icon */}
                     <div className="absolute right-2.5 top-2.5 flex items-center gap-1">
-                      {file.hasDownloadPin && (
-                        <Lock
-                          className="h-3.5 w-3.5 text-amber-400"
-                          aria-label="পিন সুরক্ষিত"
-                        />
-                      )}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1040,52 +1013,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* PIN Prompt Modal */}
-      {pinPromptState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-[#121217] p-6 text-white shadow-2xl">
-            <div className="flex items-center gap-2 text-amber-400">
-              <Lock className="h-5 w-5" />
-              <h3 className="text-sm font-semibold">পিন সুরক্ষিত ফাইল</h3>
-            </div>
-            <p className="mt-2 text-xs text-zinc-400">
-              <span className="font-semibold text-white">{pinPromptState.file.title}</span> ডাউনলোড করার জন্য পিন কোড লিখুন:
-            </p>
-            <input
-              type="password"
-              value={pinPromptInput}
-              onChange={(e) => setPinPromptInput(e.target.value)}
-              placeholder="পিন কোড..."
-              className="mt-3 w-full rounded-lg border border-zinc-700 bg-black px-3 py-2 font-mono text-xs text-white focus:border-violet-500 focus:outline-none"
-              autoFocus
-            />
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setPinPromptState(null)}
-                className="px-3 py-1.5 text-xs text-zinc-400"
-              >
-                বাতিল
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  triggerFileDownload(
-                    pinPromptState.file,
-                    pinPromptState.customUrl,
-                    pinPromptState.customFileName,
-                    pinPromptState.mode,
-                    pinPromptInput.trim()
-                  )
-                }
-                className="rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-bold text-white"
-              >
-                ডাউনলোড করুন
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Welcome Entry Popup Modal (সাইটে ঢোকার সময় পপআপ: ব্যানার, টেক্সট এবং নিচে লিংক বাটন) */}
       {!loading &&

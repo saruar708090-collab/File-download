@@ -12,6 +12,8 @@ export interface DownloadButtonConfig {
   url: string;
   fileName?: string;
   color?: 'violet' | 'emerald' | 'sky' | 'amber';
+  isDisabled?: boolean;
+  disabledMessage?: string;
 }
 
 export interface AppVersionItem {
@@ -36,6 +38,7 @@ export interface VaultFile {
   downloads: number;
   isPinned: boolean;
   hasDownloadPin: boolean;
+  downloadPin?: string;
   thumbnailUrl?: string;
   version?: string;
   badge?: string;
@@ -83,6 +86,8 @@ export interface HubSettings {
   tickerLabel?: string;
   tickerText?: string;
   tickerLink?: string;
+  downloadPinRequired?: boolean;
+  defaultDownloadPin?: string;
   hubTitle: string;
   hubHighlightText: string;
   hubAnnouncement: string;

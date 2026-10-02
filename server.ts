@@ -105,6 +105,8 @@ interface DatabaseSchema {
     hubAnnouncement: string;
     telegramChannelId: string;
     telegramChannelUrl: string;
+    downloadPinRequired?: boolean;
+    defaultDownloadPin?: string;
     allowPublicUpload: boolean;
     adminPinHash: string;
   };
@@ -328,8 +330,11 @@ function seedInitialDatabase(): DatabaseSchema {
         parsed.settings.tickerText =
           'সকল নতুন প্রিমিয়াম ও আনলকড প্রো অ্যাপস একদম ফ্রিতে ডাউনলোড করুন! কোনো অ্যাপ না পেলে "অ্যাপ রিকোয়েস্ট" বাটনে ক্লিক করে জানান — দ্রুত আপলোড করে দেওয়া হবে।';
       }
-      if (typeof parsed.settings.tickerLink !== 'string') {
-        parsed.settings.tickerLink = '';
+      if (typeof parsed.settings.downloadPinRequired !== 'boolean') {
+        parsed.settings.downloadPinRequired = true;
+      }
+      if (typeof parsed.settings.defaultDownloadPin !== 'string' || !parsed.settings.defaultDownloadPin) {
+        parsed.settings.defaultDownloadPin = '1234';
       }
       if (
         !parsed.settings.adminPinHash ||
@@ -686,7 +691,9 @@ function seedInitialDatabase(): DatabaseSchema {
       telegramChannelId: '@TF_Official_Channel',
       telegramChannelUrl: 'https://t.me/TF_Official_Channel',
       allowPublicUpload: false,
-      adminPinHash: hashPin('780')
+      adminPinHash: hashPin('780'),
+      downloadPinRequired: false,
+      defaultDownloadPin: ''
     },
     files,
     requests: [
@@ -707,17 +714,31 @@ function seedInitialDatabase(): DatabaseSchema {
   return initialDb;
 }
 
-let db: DatabaseSchema = seedInitialDatabase();
+function loadDatabase(): DatabaseSchema {
+  if (fs.existsSync(DB_PATH)) {
+    try {
+      const data = fs.readFileSync(DB_PATH, 'utf-8');
+      return JSON.parse(data);
+    } catch (err) {
+      console.error('Failed to parse database.json, seeding new one:', err);
+      return seedInitialDatabase();
+    }
+  }
+  return seedInitialDatabase();
+}
+
+let db: DatabaseSchema = loadDatabase();
 
 function saveDb() {
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), 'utf-8');
 }
 
-function sanitizeFileForClient(file: StoredFileRecord) {
+function sanitizeFileForClient(file: StoredFileRecord, isAdmin = false) {
   const { downloadPin, manageToken, storedName, ...safe } = file;
   return {
     ...safe,
-    hasDownloadPin: Boolean(file.hasDownloadPin && file.downloadPin),
+    hasDownloadPin: false,
+    ...(isAdmin ? { downloadPin: '' } : {}),
     versions:
       Array.isArray(file.versions) && file.versions.length > 0
         ? file.versions
@@ -727,13 +748,37 @@ function sanitizeFileForClient(file: StoredFileRecord) {
   };
 }
 
+// brute-force protection tracker
+const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
+
 function isAuthorizedToManage(req: Request, file?: StoredFileRecord): boolean {
+  const ip = req.ip || 'unknown';
+  const attempt = loginAttempts.get(ip);
+  const now = Date.now();
+
+  // If locked out, deny immediately
+  if (attempt && attempt.count >= 10 && now - attempt.lastAttempt < 15 * 60 * 1000) {
+    return false;
+  }
+
   const adminPin = req.headers['x-admin-pin'] ? String(req.headers['x-admin-pin']) : '';
   const manageToken = req.headers['x-manage-token'] ? String(req.headers['x-manage-token']) : '';
 
-  if (adminPin && hashPin(adminPin) === db.settings.adminPinHash) {
-    return true;
+  if (adminPin) {
+    if (hashPin(adminPin) === db.settings.adminPinHash) {
+      // Don't clear attempts here to avoid side effects in a getter function,
+      // but return true. Success path usually clears it in the dedicated verify endpoint.
+      return true;
+    }
+    // Track failed header attempts if any (simple increment)
+    if (!manageToken) {
+      const cur = loginAttempts.get(ip) || { count: 0, lastAttempt: 0 };
+      cur.count += 1;
+      cur.lastAttempt = now;
+      loginAttempts.set(ip, cur);
+    }
   }
+
   if (file && manageToken && file.manageToken && manageToken === file.manageToken) {
     return true;
   }
@@ -744,15 +789,17 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use('/api/files/text', express.json({ limit: '25mb' }));
-  app.use('/api/settings', express.json({ limit: '25mb' }));
+  app.use('/api/files/text', express.json({ limit: '50mb' }));
+  app.use('/api/settings', express.json({ limit: '50mb' }));
   app.use('/api/admin', express.json());
-  app.use('/api/files/:id', express.json({ limit: '25mb' }));
-  app.use('/api/requests', express.json({ limit: '2mb' }));
-  app.use('/api/reports', express.json({ limit: '2mb' }));
+  app.use('/api/files/:id/verify-pin', express.json());
+  app.use('/api/files/:id', express.json({ limit: '50mb' }));
+  app.use('/api/requests', express.json({ limit: '5mb' }));
+  app.use('/api/reports', express.json({ limit: '5mb' }));
 
   // 1. List all files + hub metrics + requests + reports
-  app.get('/api/files', (_req: Request, res: Response) => {
+  app.get('/api/files', (req: Request, res: Response) => {
+    const isAdmin = isAuthorizedToManage(req);
     const sorted = [...db.files].sort((a, b) => {
       if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
         return a.isPinned ? -1 : 1;
@@ -770,7 +817,7 @@ async function startServer() {
     );
 
     res.json({
-      files: sorted.map(sanitizeFileForClient),
+      files: sorted.map((f) => sanitizeFileForClient(f, isAdmin)),
       requests: Array.isArray(db.requests) ? db.requests : [],
       reports: Array.isArray(db.reports) ? db.reports : [],
       settings: {
@@ -792,6 +839,8 @@ async function startServer() {
           db.settings.tickerText ??
           'সকল নতুন প্রিমিয়াম ও আনলকড প্রো অ্যাপস একদম ফ্রিতে ডাউনলোড করুন! কোনো অ্যাপ না পেলে "অ্যাপ রিকোয়েস্ট" বাটনে ক্লিক করে জানান — দ্রুত আপলোড করে দেওয়া হবে।',
         tickerLink: db.settings.tickerLink || '',
+        downloadPinRequired: db.settings.downloadPinRequired !== false,
+        defaultDownloadPin: db.settings.defaultDownloadPin || '1234',
         hubTitle: db.settings.hubTitle || 'Welcome to',
         hubHighlightText: db.settings.hubHighlightText || 'Our Website',
         hubAnnouncement: db.settings.hubAnnouncement,
@@ -839,7 +888,7 @@ async function startServer() {
       const writeStream = fs.createWriteStream(filePath);
       const hash = crypto.createHash('sha256');
       let byteCount = 0;
-      const MAX_BYTES = 350 * 1024 * 1024;
+      const MAX_BYTES = 2048 * 1024 * 1024; // 2GB limit
       let aborted = false;
 
       req.on('data', (chunk: Buffer) => {
@@ -850,7 +899,7 @@ async function startServer() {
           try {
             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
           } catch {}
-          res.status(413).json({ error: 'ফাইলের আকার ৩৫০ মেগাবাইটের বেশি হতে পারবে না।' });
+          res.status(413).json({ error: 'ফাইলের আকার ২ গিগাবাইটের বেশি হতে পারবে না।' });
           return;
         }
         hash.update(chunk);
@@ -1144,22 +1193,17 @@ async function startServer() {
     }
   });
 
+  // 3B. Verify Download PIN endpoint (PIN completely disabled)
+  app.post('/api/files/:id/verify-pin', (_req: Request, res: Response) => {
+    res.json({ valid: true });
+  });
+
   // 4. Download file endpoint (increments download counter & saves directly to File Manager)
   app.get('/api/files/:id/download', (req: Request, res: Response) => {
     const file = db.files.find((f: StoredFileRecord) => f.id === req.params.id);
     if (!file) {
       res.status(404).json({ error: 'ফাইলটি খুঁজে পাওয়া যায়নি।' });
       return;
-    }
-
-    if (file.hasDownloadPin && file.downloadPin) {
-      const providedPin = req.query.pin ? String(req.query.pin).trim() : '';
-      if (providedPin !== file.downloadPin) {
-        res
-          .status(403)
-          .json({ error: 'এই ফাইলটি ডাউনলোড করার জন্য সঠিক পিন (PIN) প্রয়োজন।' });
-        return;
-      }
     }
 
     file.downloads = (Number(file.downloads) || 0) + 1;
@@ -1242,6 +1286,8 @@ async function startServer() {
       description,
       category,
       isPinned,
+      hasDownloadPin,
+      downloadPin,
       thumbnailUrl,
       version,
       badge,
@@ -1257,6 +1303,8 @@ async function startServer() {
     if (typeof description === 'string') file.description = description.trim();
     if (typeof category === 'string' && category.trim()) file.category = category.trim();
     if (typeof isPinned === 'boolean') file.isPinned = isPinned;
+    file.hasDownloadPin = false;
+    file.downloadPin = '';
     if (typeof thumbnailUrl === 'string') file.thumbnailUrl = thumbnailUrl.trim() || undefined;
     if (typeof version === 'string') file.version = version.trim() || 'v1.0';
     if (typeof badge === 'string') file.badge = badge.trim() || 'PRO';
@@ -1421,12 +1469,36 @@ async function startServer() {
     res.json({ success: true, reports: db.reports });
   });
 
+
+
   // 7. Verify Admin PIN
-  app.post('/api/admin/verify', (req: Request, res: Response) => {
+  app.post('/api/admin/verify', async (req: Request, res: Response) => {
+    const ip = req.ip || 'unknown';
     const { pin } = req.body || {};
+
+    const attempt = loginAttempts.get(ip) || { count: 0, lastAttempt: 0 };
+    const now = Date.now();
+
+    // Lockout for 5 minutes after 5 failed attempts
+    if (attempt.count >= 5 && now - attempt.lastAttempt < 5 * 60 * 1000) {
+      const waitMinutes = Math.ceil((5 * 60 * 1000 - (now - attempt.lastAttempt)) / 60000);
+      return res.status(429).json({
+        valid: false,
+        error: `অতিরিক্ত ভুল চেষ্টার কারণে আপনার এক্সেস ব্লক করা হয়েছে। ${waitMinutes} মিনিট পর আবার চেষ্টা করুন।`
+      });
+    }
+
+    // Artificial delay to prevent rapid brute forcing
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
     if (pin && hashPin(pin) === db.settings.adminPinHash) {
+      loginAttempts.delete(ip); // clear on success
       res.json({ valid: true });
     } else {
+      attempt.count += 1;
+      attempt.lastAttempt = now;
+      loginAttempts.set(ip, attempt);
+
       res.status(401).json({
         valid: false,
         error: 'ভুল অ্যাডমিন পিন বা পাসওয়ার্ড! শুধুমাত্র অনুমোদিত অ্যাডমিন প্রবেশ করতে পারবেন।'
@@ -1457,6 +1529,8 @@ async function startServer() {
       tickerLabel,
       tickerText,
       tickerLink,
+      downloadPinRequired,
+      defaultDownloadPin,
       hubTitle,
       hubHighlightText,
       hubAnnouncement,
@@ -1508,6 +1582,8 @@ async function startServer() {
     if (typeof tickerLink === 'string') {
       db.settings.tickerLink = tickerLink.trim();
     }
+    db.settings.downloadPinRequired = false;
+    db.settings.defaultDownloadPin = '';
     if (typeof hubTitle === 'string') {
       db.settings.hubTitle = hubTitle.trim();
     }

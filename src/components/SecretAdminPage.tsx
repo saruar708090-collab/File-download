@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import {
+  Search,
   Upload,
   Trash2,
   Pin,
@@ -80,6 +81,8 @@ interface SecretAdminPageProps {
       versions?: AppVersionItem[];
       modFeatures?: string[];
       screenshots?: string[];
+      downloadPin?: string;
+      hasDownloadPin?: boolean;
     }
   ) => Promise<void>;
   onDeleteFile: (id: string) => Promise<void>;
@@ -476,6 +479,34 @@ const VersionsAndButtonsEditor: React.FC<{
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
+                    </div>
+
+                    {/* Disable / Try Alternative toggle */}
+                    <div className="sm:col-span-12 mt-1 border-t border-zinc-800/80 pt-2 flex flex-wrap items-center gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={!!btn.isDisabled}
+                          onChange={(e) =>
+                            updateButtonInVersion(ver.id, btn.id, { isDisabled: e.target.checked })
+                          }
+                          className="rounded border-zinc-700 bg-black text-amber-500 focus:ring-amber-500"
+                        />
+                        <span className="font-semibold text-amber-400">
+                          বাটন অফ রাখুন (চাপ দিলে অন্য বাটন চেষ্টা করতে বলবে)
+                        </span>
+                      </label>
+                      {btn.isDisabled && (
+                        <input
+                          type="text"
+                          value={btn.disabledMessage || ''}
+                          onChange={(e) =>
+                            updateButtonInVersion(ver.id, btn.id, { disabledMessage: e.target.value })
+                          }
+                          placeholder="কাস্টম মেসেজ (যেমন: Direct Download বন্ধ, Fast Download ব্যবহার করুন)"
+                          className="flex-1 rounded border border-amber-500/30 bg-black px-2.5 py-1 text-xs text-zinc-200"
+                        />
+                      )}
                     </div>
                   </div>
                 );
@@ -885,6 +916,7 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
 
   // Manage files state
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [manageSearchQuery, setManageSearchQuery] = useState('');
   const [editTitle, setEditTitle] = useState('');
   const [editVersion, setEditVersion] = useState('');
   const [editBadge, setEditBadge] = useState('PRO');
@@ -1169,6 +1201,8 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
           versions: linkVersions,
           modFeatures: linkModFeatures,
           screenshots: linkScreenshots,
+          downloadPin: '',
+          hasDownloadPin: false,
           content: linkDescription.trim() || linkTitle.trim()
         })
       });
@@ -1214,6 +1248,8 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
           tickerLabel,
           tickerText,
           tickerLink,
+          downloadPinRequired: false,
+          defaultDownloadPin: '',
           hubTitle,
           hubHighlightText,
           hubAnnouncement,
@@ -1755,16 +1791,17 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                     </label>
                   </div>
 
-                  <div>
-                    <label className="block text-xs text-zinc-400">বিবরণ</label>
-                    <input
-                      type="text"
-                      value={linkDescription}
-                      onChange={(e) => setLinkDescription(e.target.value)}
-                      placeholder="প্রিমিয়াম আনলকড ফিচারসমূহ..."
-                      className="mt-1 w-full rounded-lg border border-zinc-700 bg-black px-3 py-2 text-xs text-white"
-                    />
-                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400">বিবরণ</label>
+                  <input
+                    type="text"
+                    value={linkDescription}
+                    onChange={(e) => setLinkDescription(e.target.value)}
+                    placeholder="প্রিমিয়াম আনলকড ফিচারসমূহ..."
+                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-black px-3 py-2 text-xs text-white"
+                  />
                 </div>
 
                 {/* Mod Features & Screenshot Gallery Editor */}
@@ -1810,11 +1847,43 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
         {/* TAB 2: MANAGE APPS, VERSIONS, FAST DOWNLOAD FILES & TUTORIAL VIDEOS */}
         {activeTab === 'manage' && (
           <div className="mt-6 space-y-4">
-            {files.map((file) => (
-              <div
-                key={file.id}
-                className="rounded-2xl border border-zinc-800 bg-[#121217] p-4 sm:p-5"
-              >
+            {/* Admin Search Bar for Managed Files */}
+            <div className="relative mb-4">
+              <input
+                type="text"
+                value={manageSearchQuery}
+                onChange={(e) => setManageSearchQuery(e.target.value)}
+                placeholder="এখান থেকে অ্যাপ খুঁজুন (যেমন: CapCut)..."
+                className="w-full rounded-xl border border-zinc-800 bg-[#09090D] px-10 py-3 text-sm text-white focus:border-violet-500 focus:outline-none"
+              />
+              <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-500" />
+              {manageSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setManageSearchQuery('')}
+                  className="absolute right-3.5 top-3.5 text-zinc-500 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {files
+              .filter((f) => {
+                const q = manageSearchQuery.trim().toLowerCase();
+                if (!q) return true;
+                return (
+                  f.title.toLowerCase().includes(q) ||
+                  f.originalName.toLowerCase().includes(q) ||
+                  (f.category || '').toLowerCase().includes(q) ||
+                  (f.version || '').toLowerCase().includes(q)
+                );
+              })
+              .map((file) => (
+                <div
+                  key={file.id}
+                  className="rounded-2xl border border-zinc-800 bg-[#121217] p-4 sm:p-5"
+                >
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     {file.thumbnailUrl ? (
@@ -2040,7 +2109,9 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                             tutorialVideoTitle: editTutorialVideoTitle,
                             versions: editVersions,
                             modFeatures: editModFeatures,
-                            screenshots: editScreenshots
+                            screenshots: editScreenshots,
+                            downloadPin: '',
+                            hasDownloadPin: false
                           });
                           setEditingId(null);
                           showBanner(
@@ -2606,10 +2677,14 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
                   value={newAdminPin}
                   onChange={(e) => setNewAdminPin(e.target.value)}
                   placeholder="নতুন গোপন পাসওয়ার্ড..."
-                  className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-black px-3 py-2 font-mono text-xs text-white"
+                  className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-black px-3 py-2 font-mono text-xs text-white focus:border-violet-500"
                 />
+                <p className="mt-1.5 text-[10px] text-zinc-500 italic">
+                  💡 হ্যাকিং বা ক্র্যাকিং থেকে বাঁচতে কমপক্ষে ৮-১০ অক্ষরের একটি শক্তিশালী পাসওয়ার্ড ব্যবহার করুন।
+                </p>
               </div>
             </div>
+
 
             {/* Section 0B: চলমান নোটিশ বার বা ব্রেকিং নিউজ টিকার (Scrolling Notice Ticker) */}
             <div className="space-y-4 rounded-xl border border-amber-500/30 bg-[#09090D] p-4">
