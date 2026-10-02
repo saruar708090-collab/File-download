@@ -1,0 +1,754 @@
+{
+  "settings": {
+    "brandName": "TF OFFICIAL",
+    "brandLogoUrl": "",
+    "heroBannerUrl": "",
+    "heroIconUrl": "",
+    "heroLinks": [],
+    "hubTitle": "Welcome to",
+    "hubHighlightText": "Our Website",
+    "hubAnnouncement": "আমাদের এই ওয়েবসাইট থেকে, সকল ধরনের প্রিমিয়াম ও প্রো অ্যাপস এবং ফাইল সম্পূর্ণ ফ্রিতে ডাউনলোড করতে পারবেন।",
+    "telegramChannelId": "@TF_Official_Channel",
+    "telegramChannelUrl": "https://t.me/TF_Official_Channel",
+    "allowPublicUpload": false,
+    "adminPinHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  "files": [
+    {
+      "id": "f_capcut_pro",
+      "originalName": "CapCut_Pro_v18.80_Unlocked.apk",
+      "storedName": "f_capcut_pro.apk",
+      "title": "CapCut Pro",
+      "description": "সব প্রিমিয়াম ইফেক্ট, ফিল্টার, 4K এক্সপোর্ট এবং নো-ওয়াটারমার্ক আনলকড ভার্সন।",
+      "category": "Video Editing",
+      "mimeType": "application/vnd.android.package-archive",
+      "uploaderName": "TF Admin",
+      "uploadedAt": "2026-10-02T04:24:47.490Z",
+      "downloads": 342,
+      "isPinned": true,
+      "hasDownloadPin": false,
+      "downloadPin": "",
+      "manageToken": "seed_1",
+      "version": "v18.80",
+      "badge": "PRO",
+      "rating": 5,
+      "thumbnailUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%0A%20%20%20%20%3Crect%20width%3D%22200%22%20height%3D%22200%22%20rx%3D%2244%22%20fill%3D%22%23FFFFFF%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M52%2065%20L148%20135%20M52%20135%20L148%2065%22%20stroke%3D%22%2309090B%22%20stroke-width%3D%2218%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%3Crect%20x%3D%2242%22%20y%3D%2255%22%20width%3D%2275%22%20height%3D%2226%22%20rx%3D%226%22%20fill%3D%22none%22%20stroke%3D%22%2309090B%22%20stroke-width%3D%2214%22%2F%3E%0A%20%20%20%20%3Crect%20x%3D%2242%22%20y%3D%22119%22%20width%3D%2275%22%20height%3D%2226%22%20rx%3D%226%22%20fill%3D%22none%22%20stroke%3D%22%2309090B%22%20stroke-width%3D%2214%22%2F%3E%0A%20%20%20%20%3Crect%20x%3D%2228%22%20y%3D%22146%22%20width%3D%22144%22%20height%3D%2234%22%20rx%3D%2217%22%20fill%3D%22%230EA5E9%22%2F%3E%0A%20%20%20%20%3Ctext%20x%3D%22100%22%20y%3D%22169%22%20fill%3D%22%23FFFFFF%22%20font-family%3D%22sans-serif%22%20font-size%3D%2220%22%20font-weight%3D%22bold%22%20text-anchor%3D%22middle%22%3E2026%3C%2Ftext%3E%0A%20%20%3C%2Fsvg%3E",
+      "tutorialVideoTitle": "CapCut Pro যেভাবে ইনস্টল ও ব্যবহার করবেন (Video Guide)",
+      "tutorialVideoUrl": "",
+      "size": 74,
+      "sha256": "69ecd88e6dd8fde175e64257c72575abce66562f35b268b19b8297001d9b15c1",
+      "versions": [
+        {
+          "id": "ver_latest",
+          "title": "Latest Version (v18.80)",
+          "sizeText": "86.4 MB",
+          "badge": "LATEST",
+          "buttons": [
+            {
+              "id": "btn_direct_1",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_1",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_new",
+          "title": "New Version (Pro Unlocked)",
+          "sizeText": "78.2 MB",
+          "badge": "NEW",
+          "buttons": [
+            {
+              "id": "btn_direct_2",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_2",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_old",
+          "title": "Old Version (Lite Stable)",
+          "sizeText": "64.0 MB",
+          "badge": "OLD",
+          "buttons": [
+            {
+              "id": "btn_direct_3",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_3",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f_playit_pro",
+      "originalName": "PLAYit_VIP_Pro_v17.0.0.apk",
+      "storedName": "f_playit_pro.apk",
+      "title": "PLAYit Premium",
+      "description": "অ্যাড-ফ্রি ভিআইপি ভিডিও ও মিউজিক প্লেয়ার, ব্যাকগ্রাউন্ড প্লে এবং ফাস্ট ডাউনলোডার।",
+      "category": "Video Editing",
+      "mimeType": "application/vnd.android.package-archive",
+      "uploaderName": "TF Admin",
+      "uploadedAt": "2026-10-02T05:04:47.490Z",
+      "downloads": 215,
+      "isPinned": true,
+      "hasDownloadPin": false,
+      "downloadPin": "",
+      "manageToken": "seed_2",
+      "version": "v17.0.0",
+      "badge": "PRO",
+      "rating": 5,
+      "thumbnailUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%0A%20%20%20%20%3Crect%20width%3D%22200%22%20height%3D%22200%22%20rx%3D%2244%22%20fill%3D%22%23111115%22%2F%3E%0A%20%20%20%20%3Cdefs%3E%0A%20%20%20%20%20%20%3ClinearGradient%20id%3D%22pg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23FF7A00%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23FF2E54%22%2F%3E%0A%20%20%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3C%2Fdefs%3E%0A%20%20%20%20%3Cpath%20d%3D%22M68%2048%20L152%2096%20L68%20144%20Z%22%20fill%3D%22url(%23pg)%22%20stroke%3D%22url(%23pg)%22%20stroke-width%3D%2210%22%20stroke-linejoin%3D%22round%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M92%2078%20L130%2098%20L92%20118%20Z%22%20fill%3D%22%23FFFFFF%22%2F%3E%0A%20%20%20%20%3Ctext%20x%3D%22100%22%20y%3D%22178%22%20fill%3D%22%23FFFFFF%22%20font-family%3D%22sans-serif%22%20font-size%3D%2226%22%20font-weight%3D%22800%22%20text-anchor%3D%22middle%22%3EPLAYit%3C%2Ftext%3E%0A%20%20%3C%2Fsvg%3E",
+      "tutorialVideoTitle": "PLAYit Premium সেটআপ ও ব্যবহারের নিয়ম",
+      "tutorialVideoUrl": "",
+      "size": 75,
+      "sha256": "bbdef8add08c9ee07d68d01fae134223ca5b1610fd093fca1cd8a67dec055d76",
+      "versions": [
+        {
+          "id": "ver_latest",
+          "title": "Latest Version (v17.0.0)",
+          "sizeText": "86.4 MB",
+          "badge": "LATEST",
+          "buttons": [
+            {
+              "id": "btn_direct_1",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_1",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_new",
+          "title": "New Version (Pro Unlocked)",
+          "sizeText": "78.2 MB",
+          "badge": "NEW",
+          "buttons": [
+            {
+              "id": "btn_direct_2",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_2",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_old",
+          "title": "Old Version (Lite Stable)",
+          "sizeText": "64.0 MB",
+          "badge": "OLD",
+          "buttons": [
+            {
+              "id": "btn_direct_3",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_3",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f_picsart_pro",
+      "originalName": "Picsart_Gold_Premium_v17.0.0.apk",
+      "storedName": "f_picsart_pro.apk",
+      "title": "Picsart Premium",
+      "description": "গোল্ড মেম্বারশিপ আনলকড, এআই ফটো এডিটর, ব্যাকগ্রাউন্ড রিমুভার ও সকল প্রিমিয়াম ফন্ট।",
+      "category": "Photo Editing",
+      "mimeType": "application/vnd.android.package-archive",
+      "uploaderName": "TF Admin",
+      "uploadedAt": "2026-10-02T05:44:47.490Z",
+      "downloads": 189,
+      "isPinned": true,
+      "hasDownloadPin": false,
+      "downloadPin": "",
+      "manageToken": "seed_3",
+      "version": "v17.0.0",
+      "badge": "PRO",
+      "rating": 5,
+      "thumbnailUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%0A%20%20%20%20%3Cdefs%3E%0A%20%20%20%20%20%20%3ClinearGradient%20id%3D%22picg%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23C026D3%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%2255%25%22%20stop-color%3D%22%237C3AED%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2306B6D4%22%2F%3E%0A%20%20%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3C%2Fdefs%3E%0A%20%20%20%20%3Crect%20width%3D%22200%22%20height%3D%22200%22%20rx%3D%2244%22%20fill%3D%22url(%23picg)%22%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%22100%22%20cy%3D%2288%22%20r%3D%2234%22%20fill%3D%22none%22%20stroke%3D%22%23FFFFFF%22%20stroke-width%3D%2220%22%2F%3E%0A%20%20%20%20%3Cline%20x1%3D%2266%22%20y1%3D%2288%22%20x2%3D%2266%22%20y2%3D%22162%22%20stroke%3D%22%23FFFFFF%22%20stroke-width%3D%2220%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%3C%2Fsvg%3E",
+      "tutorialVideoTitle": "Picsart Gold কিভাবে ব্যবহার করবেন দেখুন",
+      "tutorialVideoUrl": "",
+      "size": 81,
+      "sha256": "4f76377423425b41f1f2f8d51b0b17210419d4ee67c8386f457ef0b67d562290",
+      "versions": [
+        {
+          "id": "ver_latest",
+          "title": "Latest Version (v17.0.0)",
+          "sizeText": "86.4 MB",
+          "badge": "LATEST",
+          "buttons": [
+            {
+              "id": "btn_direct_1",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_1",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_new",
+          "title": "New Version (Pro Unlocked)",
+          "sizeText": "78.2 MB",
+          "badge": "NEW",
+          "buttons": [
+            {
+              "id": "btn_direct_2",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_2",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_old",
+          "title": "Old Version (Lite Stable)",
+          "sizeText": "64.0 MB",
+          "badge": "OLD",
+          "buttons": [
+            {
+              "id": "btn_direct_3",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_3",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f_yt_prem",
+      "originalName": "YouTube_Premium_v20.26.170.apk",
+      "storedName": "f_yt_prem.apk",
+      "title": "YouTube Premium",
+      "description": "বিজ্ঞাপনমুক্ত ভিডিও স্ট্রিমিং, স্ক্রিন অফ রেখে অডিও প্লে এবং পিকচার-ইন-পিকচার মোড।",
+      "category": "Apps",
+      "mimeType": "application/vnd.android.package-archive",
+      "uploaderName": "TF Admin",
+      "uploadedAt": "2026-10-02T06:24:47.490Z",
+      "downloads": 412,
+      "isPinned": false,
+      "hasDownloadPin": false,
+      "downloadPin": "",
+      "manageToken": "seed_4",
+      "version": "v20.26.170",
+      "badge": "PRO",
+      "rating": 5,
+      "thumbnailUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%0A%20%20%20%20%3Crect%20width%3D%22200%22%20height%3D%22200%22%20rx%3D%2244%22%20fill%3D%22%23FFFFFF%22%2F%3E%0A%20%20%20%20%3Crect%20x%3D%2234%22%20y%3D%2256%22%20width%3D%22132%22%20height%3D%2288%22%20rx%3D%2224%22%20fill%3D%22%23EF4444%22%2F%3E%0A%20%20%20%20%3Cpolygon%20points%3D%2286%2C78%2086%2C122%20126%2C100%22%20fill%3D%22%23FFFFFF%22%2F%3E%0A%20%20%3C%2Fsvg%3E",
+      "tutorialVideoTitle": "YouTube Premium ইনস্টল করার নিয়ম",
+      "tutorialVideoUrl": "",
+      "size": 79,
+      "sha256": "41a6bdddf968e66543bbf6d94fb10c791ff4fd5e2ac0b5c1a9c189f92f5ba8a2",
+      "versions": [
+        {
+          "id": "ver_latest",
+          "title": "Latest Version (v20.26.170)",
+          "sizeText": "86.4 MB",
+          "badge": "LATEST",
+          "buttons": [
+            {
+              "id": "btn_direct_1",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_1",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_new",
+          "title": "New Version (Pro Unlocked)",
+          "sizeText": "78.2 MB",
+          "badge": "NEW",
+          "buttons": [
+            {
+              "id": "btn_direct_2",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_2",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_old",
+          "title": "Old Version (Lite Stable)",
+          "sizeText": "64.0 MB",
+          "badge": "OLD",
+          "buttons": [
+            {
+              "id": "btn_direct_3",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_3",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f_remini_pro",
+      "originalName": "Remini_AI_Enhancer_v17.0.0.apk",
+      "storedName": "f_remini_pro.apk",
+      "title": "Remini Premium",
+      "description": "ঘোলা ও পুরনো ছবি এক ক্লিকে এইচডি (HD) করার প্রিমিয়াম এআই ফটো এনহ্যান্সার।",
+      "category": "Photo Editing",
+      "mimeType": "application/vnd.android.package-archive",
+      "uploaderName": "TF Admin",
+      "uploadedAt": "2026-10-02T06:54:47.490Z",
+      "downloads": 276,
+      "isPinned": false,
+      "hasDownloadPin": false,
+      "downloadPin": "",
+      "manageToken": "seed_5",
+      "version": "v17.0.0",
+      "badge": "PRO",
+      "rating": 5,
+      "thumbnailUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%0A%20%20%20%20%3Crect%20width%3D%22200%22%20height%3D%22200%22%20rx%3D%2244%22%20fill%3D%22%23991B1B%22%2F%3E%0A%20%20%20%20%3Ctext%20x%3D%22100%22%20y%3D%22138%22%20fill%3D%22%23FFFFFF%22%20font-family%3D%22sans-serif%22%20font-size%3D%2238%22%20font-weight%3D%22800%22%20text-anchor%3D%22middle%22%3ERemini%3C%2Ftext%3E%0A%20%20%20%20%3Cpath%20d%3D%22M55%2075%20Q100%2045%20145%2075%22%20stroke%3D%22%23FCA5A5%22%20stroke-width%3D%226%22%20fill%3D%22none%22%2F%3E%0A%20%20%3C%2Fsvg%3E",
+      "tutorialVideoTitle": "Remini Pro ব্যবহারের টিউটোরিয়াল",
+      "tutorialVideoUrl": "",
+      "size": 67,
+      "sha256": "e86d74a42eded21f52d1e4f01b5b755d99bb8bf7170c64ddc7332e61f36af05c",
+      "versions": [
+        {
+          "id": "ver_latest",
+          "title": "Latest Version (v17.0.0)",
+          "sizeText": "86.4 MB",
+          "badge": "LATEST",
+          "buttons": [
+            {
+              "id": "btn_direct_1",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_1",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_new",
+          "title": "New Version (Pro Unlocked)",
+          "sizeText": "78.2 MB",
+          "badge": "NEW",
+          "buttons": [
+            {
+              "id": "btn_direct_2",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_2",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_old",
+          "title": "Old Version (Lite Stable)",
+          "sizeText": "64.0 MB",
+          "badge": "OLD",
+          "buttons": [
+            {
+              "id": "btn_direct_3",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_3",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f_imo_pro",
+      "originalName": "imo_Premium_AdFree_v2.3.0.apk",
+      "storedName": "f_imo_pro.apk",
+      "title": "imo Premium",
+      "description": "সকল প্রকার বিরক্তিকর বিজ্ঞাপন ছাড়া এইচডি অডিও ও ভিডিও কলিং প্রিমিয়াম অ্যাপ।",
+      "category": "Apps",
+      "mimeType": "application/vnd.android.package-archive",
+      "uploaderName": "TF Admin",
+      "uploadedAt": "2026-10-02T07:24:47.490Z",
+      "downloads": 164,
+      "isPinned": false,
+      "hasDownloadPin": false,
+      "downloadPin": "",
+      "manageToken": "seed_6",
+      "version": "v2.3.0",
+      "badge": "PRO",
+      "rating": 5,
+      "thumbnailUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%0A%20%20%20%20%3Crect%20width%3D%22200%22%20height%3D%22200%22%20rx%3D%2244%22%20fill%3D%22%23EFF6FF%22%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%22100%22%20cy%3D%22100%22%20r%3D%2264%22%20fill%3D%22none%22%20stroke%3D%22%232563EB%22%20stroke-width%3D%2214%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M52%20146%20L38%20164%20L72%20156%22%20fill%3D%22%232563EB%22%2F%3E%0A%20%20%20%20%3Ctext%20x%3D%22100%22%20y%3D%22114%22%20fill%3D%22%231E293B%22%20font-family%3D%22sans-serif%22%20font-size%3D%2242%22%20font-weight%3D%22800%22%20text-anchor%3D%22middle%22%3Eimo%3C%2Ftext%3E%0A%20%20%3C%2Fsvg%3E",
+      "tutorialVideoTitle": "imo Premium ব্যবহারের নিয়ম",
+      "tutorialVideoUrl": "",
+      "size": 65,
+      "sha256": "96d27f9c008360c6c48ccb9f2e7f351ad7a519c6c9c300bf9611b115e80ef0c1",
+      "versions": [
+        {
+          "id": "ver_latest",
+          "title": "Latest Version (v2.3.0)",
+          "sizeText": "86.4 MB",
+          "badge": "LATEST",
+          "buttons": [
+            {
+              "id": "btn_direct_1",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_1",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_new",
+          "title": "New Version (Pro Unlocked)",
+          "sizeText": "78.2 MB",
+          "badge": "NEW",
+          "buttons": [
+            {
+              "id": "btn_direct_2",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_2",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_old",
+          "title": "Old Version (Lite Stable)",
+          "sizeText": "64.0 MB",
+          "badge": "OLD",
+          "buttons": [
+            {
+              "id": "btn_direct_3",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_3",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f_lr_pro",
+      "originalName": "Lightroom_Pro_Unlocked_v10.2.apk",
+      "storedName": "f_lr_pro.apk",
+      "title": "Lightroom Pro",
+      "description": "প্রফেশনাল কালার গ্রেডিং, প্রিসেট সাপোর্ট ও মাস্কিং টুলস সম্পূর্ণ আনলকড।",
+      "category": "Photo Editing",
+      "mimeType": "application/vnd.android.package-archive",
+      "uploaderName": "TF Admin",
+      "uploadedAt": "2026-10-02T07:44:47.490Z",
+      "downloads": 198,
+      "isPinned": false,
+      "hasDownloadPin": false,
+      "downloadPin": "",
+      "manageToken": "seed_7",
+      "version": "v10.2.0",
+      "badge": "PRO",
+      "rating": 5,
+      "thumbnailUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%0A%20%20%20%20%3Crect%20width%3D%22200%22%20height%3D%22200%22%20rx%3D%2244%22%20fill%3D%22%230F172A%22%20stroke%3D%22%2338BDF8%22%20stroke-width%3D%226%22%2F%3E%0A%20%20%20%20%3Ctext%20x%3D%22100%22%20y%3D%22128%22%20fill%3D%22%2338BDF8%22%20font-family%3D%22sans-serif%22%20font-size%3D%2282%22%20font-weight%3D%22800%22%20text-anchor%3D%22middle%22%3ELr%3C%2Ftext%3E%0A%20%20%3C%2Fsvg%3E",
+      "tutorialVideoTitle": "Lightroom Pro ব্যবহারের গাইড",
+      "tutorialVideoUrl": "",
+      "size": 61,
+      "sha256": "a5bb13f65e0cf35d3f9563e8810bd417852793804bb0bc1cc51b0a7d86f38466",
+      "versions": [
+        {
+          "id": "ver_latest",
+          "title": "Latest Version (v10.2.0)",
+          "sizeText": "86.4 MB",
+          "badge": "LATEST",
+          "buttons": [
+            {
+              "id": "btn_direct_1",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_1",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_new",
+          "title": "New Version (Pro Unlocked)",
+          "sizeText": "78.2 MB",
+          "badge": "NEW",
+          "buttons": [
+            {
+              "id": "btn_direct_2",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_2",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_old",
+          "title": "Old Version (Lite Stable)",
+          "sizeText": "64.0 MB",
+          "badge": "OLD",
+          "buttons": [
+            {
+              "id": "btn_direct_3",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_3",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f_alight_pro",
+      "originalName": "Alight_Motion_Pro_v5.0.260.apk",
+      "storedName": "f_alight_pro.apk",
+      "title": "Alight Motion Pro",
+      "description": "মোশন গ্রাফিক্স, এক্সএমএল (XML) সাপোর্ট ও ওয়াটারমার্ক ছাড়া ভিডিও এডিটিং।",
+      "category": "Video Editing",
+      "mimeType": "application/vnd.android.package-archive",
+      "uploaderName": "TF Admin",
+      "uploadedAt": "2026-10-02T08:04:47.490Z",
+      "downloads": 231,
+      "isPinned": false,
+      "hasDownloadPin": false,
+      "downloadPin": "",
+      "manageToken": "seed_8",
+      "version": "v5.0.260",
+      "badge": "PRO",
+      "rating": 5,
+      "thumbnailUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%0A%20%20%20%20%3Crect%20width%3D%22200%22%20height%3D%22200%22%20rx%3D%2244%22%20fill%3D%22%2318181B%22%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%22100%22%20cy%3D%22100%22%20r%3D%2256%22%20fill%3D%22none%22%20stroke%3D%22%2310B981%22%20stroke-width%3D%2214%22%20stroke-dasharray%3D%22240%2060%22%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%22100%22%20cy%3D%22100%22%20r%3D%2230%22%20fill%3D%22none%22%20stroke%3D%22%2334D399%22%20stroke-width%3D%2212%22%20stroke-dasharray%3D%22120%2040%22%2F%3E%0A%20%20%3C%2Fsvg%3E",
+      "tutorialVideoTitle": "Alight Motion Pro ব্যবহারের নিয়ম",
+      "tutorialVideoUrl": "",
+      "size": 65,
+      "sha256": "3d1916ac646135ac9e1584fd69e91cbd07741fea098ae3a919dcac49fa9023cf",
+      "versions": [
+        {
+          "id": "ver_latest",
+          "title": "Latest Version (v5.0.260)",
+          "sizeText": "86.4 MB",
+          "badge": "LATEST",
+          "buttons": [
+            {
+              "id": "btn_direct_1",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_1",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_new",
+          "title": "New Version (Pro Unlocked)",
+          "sizeText": "78.2 MB",
+          "badge": "NEW",
+          "buttons": [
+            {
+              "id": "btn_direct_2",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_2",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        },
+        {
+          "id": "ver_old",
+          "title": "Old Version (Lite Stable)",
+          "sizeText": "64.0 MB",
+          "badge": "OLD",
+          "buttons": [
+            {
+              "id": "btn_direct_3",
+              "label": "Direct Download",
+              "mode": "link",
+              "url": "https://t.me/TF_Official_Channel",
+              "color": "violet"
+            },
+            {
+              "id": "btn_fast_3",
+              "label": "Fast Download",
+              "mode": "file",
+              "url": "",
+              "color": "emerald"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "MeghDrive — পাবলিক ফাইল ভল্ট ও ডাউনলোড হাব",
+  "description": "যেকোনো ধরনের ফাইল আপলোড করে রাখার এবং সবার সাথে সহজে ডাউনলোড লিংক শেয়ার করার ক্লাউড ফাইল রিপোজিটরি।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
