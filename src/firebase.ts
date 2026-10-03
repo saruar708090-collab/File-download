@@ -7,4 +7,14 @@ import firebaseConfig from '../firebase-applet-config.json';
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
-export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+
+export const analytics = (() => {
+  try {
+    if (typeof window !== 'undefined' && firebaseConfig.measurementId) {
+      return getAnalytics(app);
+    }
+  } catch (e) {
+    console.warn('Analytics notice:', e);
+  }
+  return null;
+})();
