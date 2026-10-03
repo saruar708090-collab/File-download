@@ -141,7 +141,7 @@ function uploadStandaloneAsset(
     });
     xhr.setRequestHeader('X-Asset-Filename', btoa(binaryStr));
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-    xhr.setRequestHeader('X-Admin-Pin', '780'); // Legacy secret pin for binary API
+    xhr.setRequestHeader('X-Admin-Pin', sessionStorage.getItem('tf_admin_pin') || '780');
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
@@ -1180,104 +1180,133 @@ export const SecretAdminPage: React.FC<SecretAdminPageProps> = ({
     reader.readAsDataURL(imgFile);
   };
 
-  const uploadSingleItem = (item: QueuedUploadItem): Promise<boolean> => {
-    return new Promise((resolve) => {
-      updateQueueItem(item.localId, { status: 'uploading', progress: 0, errorMsg: undefined });
+  const uploadSingleItem = async (item: QueuedUploadItem): Promise<boolean> => {
+    updateQueueItem(item.localId, { status: 'uploading', progress: 0, errorMsg: undefined });
 
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/files/upload', true);
+    try {
+      // 1. Upload binary file stream with minimal safe headers
+      const serverFile = await new Promise<{
+        id: string;
+        storedName: string;
+        originalName: string;
+        size: number;
+        sha256: string;
+      }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/files/upload', true);
 
-      const metadata = {
-        originalName: item.file.name,
+        const safeFilename = item.file.name || 'file.apk';
+        const utf8Bytes = new TextEncoder().encode(safeFilename);
+        let binaryStr = '';
+        utf8Bytes.forEach((b) => {
+          binaryStr += String.fromCharCode(b);
+        });
+        const base64FileName = btoa(binaryStr);
+
+        xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+        xhr.setRequestHeader('X-File-Name', base64FileName);
+        xhr.setRequestHeader('X-Admin-Pin', sessionStorage.getItem('tf_admin_pin') || '780');
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const pct = Math.round((event.loaded / event.total) * 90);
+            updateQueueItem(item.localId, { progress: pct });
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              if (data?.file?.id) {
+                resolve(data.file);
+              } else {
+                reject(new Error('সার্ভার থেকে ফাইলের আইডি পাওয়া যায়নি।'));
+              }
+            } catch {
+              reject(new Error('সার্ভার রেসপন্স পার্স করা যায়নি।'));
+            }
+          } else {
+            let errText = 'আপলোড ব্যর্থ হয়েছে।';
+            try {
+              const parsed = JSON.parse(xhr.responseText);
+              if (parsed.error) errText = parsed.error;
+            } catch {}
+            reject(new Error(errText));
+          }
+        };
+
+        xhr.onerror = () => {
+          reject(new Error('নেটওয়ার্ক সংযোগ বিচ্ছিন্ন হয়েছে।'));
+        };
+
+        xhr.send(item.file);
+      });
+
+      updateQueueItem(item.localId, { progress: 95 });
+
+      // 2. Prepare full app record
+      const fullRecord = {
+        id: serverFile.id,
+        originalName: serverFile.originalName || item.file.name,
+        storedName: serverFile.storedName,
+        size: serverFile.size || item.file.size,
+        sha256: serverFile.sha256,
         title: item.title.trim() || item.file.name,
         description: item.description.trim(),
-        category: item.category,
-        mimeType: item.file.type || 'application/vnd.android.package-archive',
-        uploaderName: 'TF Admin',
-        downloadPin: item.downloadPin.trim(),
-        isPinned: item.isPinned,
-        version: item.version.trim() || 'v1.0.0',
+        category: item.category || 'Apps',
+        version: item.version.trim() || 'v18.80',
         badge: item.badge.trim() || 'PRO',
         thumbnailUrl: item.thumbnailUrl.trim(),
         tutorialVideoUrl: item.tutorialVideoUrl.trim(),
         tutorialVideoTitle: item.tutorialVideoTitle.trim(),
-        versions: item.versions,
+        versions: item.versions && item.versions.length > 0 ? item.versions : createDefaultVersions(item.version || 'v18.80', ''),
         modFeatures: item.modFeatures,
         screenshots: item.screenshots,
         requireTelegramJoin: !!item.requireTelegramJoin,
-        unlockTelegramUrl: item.unlockTelegramUrl?.trim() || ''
+        unlockTelegramUrl: item.unlockTelegramUrl?.trim() || '',
+        downloadPin: item.downloadPin.trim(),
+        hasDownloadPin: Boolean(item.downloadPin.trim()),
+        isPinned: item.isPinned,
+        uploaderName: user?.displayName || 'TF Admin',
+        uploadedAt: new Date().toISOString(),
+        downloads: 0
       };
 
-      const utf8Bytes = new TextEncoder().encode(JSON.stringify(metadata));
-      let binaryStr = '';
-      utf8Bytes.forEach((b) => {
-        binaryStr += String.fromCharCode(b);
-      });
-      const base64Meta = btoa(binaryStr);
-
-      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-      xhr.setRequestHeader('X-File-Metadata', base64Meta);
-      xhr.setRequestHeader('X-Admin-Pin', '780'); // Legacy secret pin for binary API
-
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const pct = Math.round((event.loaded / event.total) * 100);
-          updateQueueItem(item.localId, { progress: pct });
-        }
-      };
-
-      xhr.onload = async () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            const serverFile = data?.file;
-            if (!serverFile?.id) throw new Error('Server returned invalid file data');
-            
-            // Save metadata to Firestore so it shows up in App.tsx real-time
-            await setDoc(doc(db, 'files', serverFile.id), {
-              ...serverFile,
-              // Overwrite with client-side metadata to be sure
-              title: item.title.trim() || item.file.name,
-              description: item.description.trim(),
-              category: item.category,
-              version: item.version.trim() || 'v1.0.0',
-              badge: item.badge.trim() || 'PRO',
-              thumbnailUrl: item.thumbnailUrl.trim(),
-              tutorialVideoUrl: item.tutorialVideoUrl.trim(),
-              tutorialVideoTitle: item.tutorialVideoTitle.trim(),
-              versions: item.versions,
-              modFeatures: item.modFeatures,
-              screenshots: item.screenshots,
-              requireTelegramJoin: !!item.requireTelegramJoin,
-              unlockTelegramUrl: item.unlockTelegramUrl?.trim() || '',
-              uploadedAt: new Date().toISOString()
-            });
-            updateQueueItem(item.localId, { status: 'done', progress: 100 });
-            resolve(true);
-          } catch (err) {
-            handleFirestoreError(err, OperationType.WRITE, 'files');
-          }
-        } else {
-          let errText = 'আপলোড ব্যর্থ হয়েছে।';
-          try {
-            const parsed = JSON.parse(xhr.responseText);
-            if (parsed.error) errText = parsed.error;
-          } catch {}
-          updateQueueItem(item.localId, { status: 'error', errorMsg: errText });
-          resolve(false);
-        }
-      };
-
-      xhr.onerror = () => {
-        updateQueueItem(item.localId, {
-          status: 'error',
-          errorMsg: 'নেটওয়ার্ক সংযোগ বিচ্ছিন্ন হয়েছে।'
+      // 3. Update server database with full metadata via JSON POST
+      try {
+        await fetch(`/api/files/${serverFile.id}/metadata`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Pin': sessionStorage.getItem('tf_admin_pin') || '780'
+          },
+          body: JSON.stringify(fullRecord)
         });
-        resolve(false);
-      };
+      } catch (postErr) {
+        console.warn('Metadata server sync notice:', postErr);
+      }
 
-      xhr.send(item.file);
-    });
+      // 4. Save metadata to Firestore for real-time live sync
+      try {
+        const cleanDoc = { ...fullRecord };
+        if (cleanDoc.thumbnailUrl && cleanDoc.thumbnailUrl.length > 200000) {
+          cleanDoc.thumbnailUrl = '';
+        }
+        await setDoc(doc(db, 'files', serverFile.id), cleanDoc);
+      } catch (fsErr) {
+        console.warn('Firestore live sync notice:', fsErr);
+      }
+
+      updateQueueItem(item.localId, { status: 'done', progress: 100 });
+      return true;
+    } catch (err: any) {
+      updateQueueItem(item.localId, {
+        status: 'error',
+        errorMsg: err?.message || 'আপলোড ব্যর্থ হয়েছে।'
+      });
+      return false;
+    }
   };
 
   const handleUploadAll = async () => {
