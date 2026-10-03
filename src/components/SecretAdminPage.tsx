@@ -222,11 +222,17 @@ const VersionsAndButtonsEditor: React.FC<{
     onChange(versions.filter((v) => v.id !== verId));
   };
 
-  const addButtonToVersion = (verId: string, mode: 'link' | 'file') => {
+  const addButtonToVersion = (verId: string, mode: 'link' | 'file' | 'open') => {
     const target = versions.find((v) => v.id === verId);
     if (!target) return;
     const newBtn: DownloadButtonConfig =
-      mode === 'link'
+      mode === 'open' ? {
+            id: 'btn_' + Math.random().toString(36).slice(2, 8),
+            label: 'Direct Open File',
+            mode: 'open',
+            url: '',
+            color: 'sky'
+          } : mode === 'link'
         ? {
             id: 'btn_' + Math.random().toString(36).slice(2, 8),
             label: 'Direct Download',
@@ -264,14 +270,17 @@ const VersionsAndButtonsEditor: React.FC<{
     updateVersionField(verId, 'buttons', nextBtns);
   };
 
-  const handleButtonFileUpload = async (verId: string, btnId: string, file: File) => {
+  const handleButtonFileUpload = async (verId: string, btnId: string, file: File, targetMode?: 'file' | 'link' | 'open') => {
     const key = `${verId}_${btnId}`;
     setUploadingBtnKey(key);
     setUploadPct(0);
     try {
       const uploaded = await uploadStandaloneAsset(file, (pct) => setUploadPct(pct));
+      const target = versions.find((v) => v.id === verId);
+      const btn = target?.buttons?.find((b) => b.id === btnId);
+      const currentMode = targetMode || btn?.mode || 'file';
       updateButtonInVersion(verId, btnId, {
-        mode: 'file',
+        mode: currentMode,
         url: uploaded.url,
         fileName: uploaded.fileName
       });
@@ -372,7 +381,7 @@ const VersionsAndButtonsEditor: React.FC<{
           <div className="rounded-lg border border-zinc-800/90 bg-black/60 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5">
               <span className="text-[11px] font-semibold text-zinc-300">
-                ২য় পেজের বাটন: <strong className="text-violet-400">Direct Download</strong> (লিংক থাকবে) এবং <strong className="text-emerald-400">Fast Download</strong> (সরাসরি ফাইল ম্যানেজারে ডাউনলোড হবে):
+                ২য় পেজের বাটন: <strong className="text-violet-400">Direct Download</strong>, <strong className="text-emerald-400">Fast Download</strong> এবং <strong className="text-sky-400">Direct Open</strong> (ব্রাউজারে সরাসরি HTML/ওয়েব ওপেন হবে):
               </span>
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
@@ -389,15 +398,22 @@ const VersionsAndButtonsEditor: React.FC<{
                 >
                   <Plus className="h-3 w-3" /> ফাইল বাটন (Fast)
                 </button>
+                <button
+                  type="button"
+                  onClick={() => addButtonToVersion(ver.id, 'open')}
+                  className="inline-flex items-center gap-1 rounded bg-sky-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-sky-500"
+                >
+                  <Plus className="h-3 w-3" /> ওপেন বাটন (HTML)
+                </button>
               </div>
             </div>
 
             <div className="space-y-2.5">
               {(ver.buttons || []).map((btn, bIndex) => {
                 const isUploadingThis = uploadingBtnKey === `${ver.id}_${btn.id}`;
-                const resolvedMode: 'file' | 'link' =
+                const resolvedMode: 'file' | 'link' | 'open' =
                   btn.mode ||
-                  (btn.label.toLowerCase().includes('fast') ? 'file' : 'link');
+                  (btn.label.toLowerCase().includes('open') ? 'open' : (btn.label.toLowerCase().includes('fast') ? 'file' : 'link'));
 
                 return (
                   <div
@@ -413,31 +429,32 @@ const VersionsAndButtonsEditor: React.FC<{
                         onChange={(e) =>
                           updateButtonInVersion(ver.id, btn.id, { label: e.target.value })
                         }
-                        placeholder={resolvedMode === 'link' ? 'Direct Download' : 'Fast Download'}
+                        placeholder={resolvedMode === 'link' ? 'Direct Download' : resolvedMode === 'open' ? 'Direct Open File' : 'Fast Download'}
                         className="w-full rounded border border-zinc-700 bg-[#121218] px-2.5 py-1.5 text-xs font-semibold text-white"
                       />
                     </div>
 
-                    {/* Mode Selector: Link vs Direct File Manager */}
+                    {/* Mode Selector: Link vs Direct File Manager vs Direct Open */}
                     <div className="sm:col-span-2">
                       <label className="block text-[10px] text-zinc-400 mb-0.5">কাজের ধরন</label>
                       <select
                         value={resolvedMode}
                         onChange={(e) => {
-                          const nextMode = e.target.value as 'file' | 'link';
+                          const nextMode = e.target.value as 'file' | 'link' | 'open';
                           updateButtonInVersion(ver.id, btn.id, {
                             mode: nextMode,
-                            color: nextMode === 'file' ? 'emerald' : 'violet'
+                            color: nextMode === 'file' ? 'emerald' : nextMode === 'open' ? 'sky' : 'violet'
                           });
                         }}
                         className="w-full rounded border border-zinc-700 bg-[#121218] px-2 py-1.5 text-[11px] font-semibold text-white"
                       >
                         <option value="link">লিংক (Direct Link)</option>
                         <option value="file">ফাইল ম্যানেজার (Fast)</option>
+                        <option value="open">সরাসরি ওপেন (Direct Open / HTML)</option>
                       </select>
                     </div>
 
-                    {/* Conditional Input: Link URL vs Direct File Manager Upload */}
+                    {/* Conditional Input: Link URL vs Direct File Upload vs Open HTML Upload */}
                     <div className="sm:col-span-4">
                       {resolvedMode === 'link' ? (
                         <div>
@@ -453,6 +470,34 @@ const VersionsAndButtonsEditor: React.FC<{
                             placeholder="https://drive.google.com/... বা যেকোনো লিংক"
                             className="w-full rounded border border-violet-500/40 bg-[#121218] px-2.5 py-1.5 font-mono text-xs text-zinc-100"
                           />
+                        </div>
+                      ) : resolvedMode === 'open' ? (
+                        <div>
+                          <label className="block text-[10px] text-sky-400 mb-0.5">
+                            ব্রাউজারে সরাসরি ওপেন করার জন্য HTML বা ফাইল আপলোড করুন
+                          </label>
+                          <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded border border-sky-500/40 bg-sky-950/30 px-2.5 py-1.5 text-xs font-bold text-sky-300 hover:bg-sky-900/40">
+                            <FolderUp className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">
+                              {isUploadingThis
+                                ? `আপলোড হচ্ছে ${uploadPct}%`
+                                : btn.fileName
+                                ? `ফাইল: ${btn.fileName}`
+                                : 'HTML ফাইল বা ওয়েব পেজ দিন'}
+                            </span>
+                            <input
+                              type="file"
+                              accept=".html,.htm,.txt,.json,.png,.jpg,.jpeg,.webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) {
+                                  handleButtonFileUpload(ver.id, btn.id, f, 'open');
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
                         </div>
                       ) : (
                         <div>
@@ -474,7 +519,7 @@ const VersionsAndButtonsEditor: React.FC<{
                               onChange={(e) => {
                                 const f = e.target.files?.[0];
                                 if (f) {
-                                  handleButtonFileUpload(ver.id, btn.id, f);
+                                  handleButtonFileUpload(ver.id, btn.id, f, 'file');
                                   e.target.value = '';
                                 }
                               }}

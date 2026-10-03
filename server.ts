@@ -1169,7 +1169,17 @@ async function startServer() {
     const ext = path.extname(downloadName).toLowerCase();
     const isVideo = ['.mp4', '.webm', '.ogg', '.mov'].includes(ext);
     const isImage = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'].includes(ext);
-    const forceDownload = req.query.download === '1' || (!isVideo && !isImage);
+    const isHtml = ['.html', '.htm'].includes(ext);
+    const forceDownload = req.query.download === '1' || (!isVideo && !isImage && !isHtml);
+
+    if (isHtml && !forceDownload) {
+      res.writeHead(200, {
+        'Content-Length': stat.size,
+        'Content-Type': 'text/html; charset=utf-8'
+      });
+      fs.createReadStream(filePath).pipe(res);
+      return;
+    }
 
     if (isImage && !forceDownload) {
       const imgMimeMap: Record<string, string> = {

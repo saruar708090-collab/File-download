@@ -49,17 +49,18 @@ import { SecretAdminPage } from './components/SecretAdminPage';
 import { sanitizeDocForFirestore } from './utils/assetUploader';
 
 function checkIsAdminRoute(): boolean {
-  const pathname = window.location.pathname.toLowerCase().replace(/\/+$/, '');
+  const pathname = window.location.pathname.toLowerCase();
   const hash = window.location.hash.toLowerCase();
   const search = window.location.search.toLowerCase();
   return (
-    pathname.endsWith('/admin780') ||
-    pathname.endsWith('/admin') ||
-    hash === '#/admin780' ||
-    hash === '#admin780' ||
-    hash === '#/admin' ||
-    hash === '#admin' ||
+    pathname.includes('admin780') ||
+    pathname.includes('admin') ||
+    pathname.includes('saruar70809000') ||
+    hash.includes('admin780') ||
+    hash.includes('admin') ||
+    hash.includes('saruar70809000') ||
     search.includes('admin780') ||
+    search.includes('saruar70809000') ||
     search.includes('admin=true') ||
     search === '?admin'
   );
@@ -651,18 +652,26 @@ export default function App() {
     file: VaultFile,
     customUrl?: string,
     customFileName?: string,
-    mode?: 'file' | 'link'
+    mode?: 'file' | 'link' | 'open'
   ) => {
-    // 1. Increment download count in Firestore
-    try {
-      await updateDoc(doc(db, 'files', file.id), {
-        downloads: (file.downloads || 0) + 1
-      });
-    } catch (err) {
-      console.error('Download count increment failed:', err);
+    // 1. If mode is 'open', open window SYNCHRONOUSLY to prevent popup blocker
+    if (mode === 'open') {
+      if (customUrl && customUrl.trim()) {
+        window.open(customUrl.trim(), '_blank');
+        showToast('সরাসরি ফাইল/ওয়েবপেজ ওপেন হয়েছে!');
+      } else {
+        showToast('কোনো ফাইল বা লিংক যুক্ত করা হয়নি।');
+      }
+      try {
+        const { setDoc } = await import('firebase/firestore');
+        setDoc(doc(db, 'files', file.id), {
+          downloads: (file.downloads || 0) + 1
+        }, { merge: true }).catch(() => {});
+      } catch {}
+      return;
     }
 
-    // 2. Handle the actual download
+    // 2. Handle the actual action
     const finalFileName =
       customFileName ||
       file.originalName ||
@@ -684,6 +693,13 @@ export default function App() {
         ? 'ডাউনলোড লিংক ওপেন হয়েছে!'
         : `"${finalFileName}" ডাউনলোড শুরু হয়েছে!`
     );
+
+    try {
+      const { setDoc } = await import('firebase/firestore');
+      setDoc(doc(db, 'files', file.id), {
+        downloads: (file.downloads || 0) + 1
+      }, { merge: true }).catch(() => {});
+    } catch {}
   };
 
   const handleCopyTelegramId = () => {
@@ -696,6 +712,10 @@ export default function App() {
   const handleSearchChange = (val: string) => {
     setSearchQuery(val);
     triggerSearchFeedback();
+    const clean = val.trim().toLowerCase();
+    if (clean === 'saruar70809000' || clean === 'admin780') {
+      navigateToAdmin();
+    }
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {

@@ -8,7 +8,7 @@ export type FileCategory =
 export interface DownloadButtonConfig {
   id: string;
   label: string;
-  mode?: 'file' | 'link'; // 'file' = Fast Download directly to File Manager, 'link' = Direct Download external URL
+  mode?: 'file' | 'link' | 'open'; // 'file' = Fast Download, 'link' = Direct Download, 'open' = Direct Open File / HTML in browser
   url: string;
   fileName?: string;
   color?: 'violet' | 'emerald' | 'sky' | 'amber';

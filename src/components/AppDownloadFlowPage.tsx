@@ -42,7 +42,7 @@ interface AppDownloadFlowPageProps {
     file: VaultFile,
     customUrl?: string,
     customFileName?: string,
-    mode?: 'file' | 'link'
+    mode?: 'file' | 'link' | 'open'
   ) => void;
   onReportSubmitted?: () => void;
   onShowToast?: (msg: string) => void;
@@ -227,8 +227,10 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
       return;
     }
     setDownloadingBtnId(btn.id);
-    const resolvedMode: 'file' | 'link' =
-      btn.mode || (btn.label.toLowerCase().includes('fast') ? 'file' : 'link');
+    const resolvedMode: 'file' | 'link' | 'open' =
+      btn.mode || 
+      (btn.label.toLowerCase().includes('open') ? 'open' : 
+       btn.label.toLowerCase().includes('fast') ? 'file' : 'link');
 
     const downloadFileName =
       btn.fileName ||
@@ -601,8 +603,10 @@ export const AppDownloadFlowPage: React.FC<AppDownloadFlowPageProps> = ({
                       }
                     ]
                 ).map((btn, idx) => {
-                  const resolvedMode: 'file' | 'link' =
-                    btn.mode || (btn.label.toLowerCase().includes('fast') ? 'file' : 'link');
+                  const resolvedMode: 'file' | 'link' | 'open' =
+                    btn.mode || 
+                    (btn.label.toLowerCase().includes('open') ? 'open' : 
+                     btn.label.toLowerCase().includes('fast') ? 'file' : 'link');
                   const isFastFile = resolvedMode === 'file';
                   const isDownloading = downloadingBtnId === btn.id;
                   return (
