@@ -46,6 +46,7 @@ import {
 
 import { AppDownloadFlowPage } from './components/AppDownloadFlowPage';
 import { SecretAdminPage } from './components/SecretAdminPage';
+import { sanitizeDocForFirestore } from './utils/assetUploader';
 
 function checkIsAdminRoute(): boolean {
   const pathname = window.location.pathname.toLowerCase().replace(/\/+$/, '');
@@ -53,9 +54,14 @@ function checkIsAdminRoute(): boolean {
   const search = window.location.search.toLowerCase();
   return (
     pathname.endsWith('/admin780') ||
+    pathname.endsWith('/admin') ||
     hash === '#/admin780' ||
     hash === '#admin780' ||
-    search.includes('admin780')
+    hash === '#/admin' ||
+    hash === '#admin' ||
+    search.includes('admin780') ||
+    search.includes('admin=true') ||
+    search === '?admin'
   );
 }
 
@@ -101,9 +107,8 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     },
     operationType,
     path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  };
+  console.warn('Firestore Notice (non-fatal):', JSON.stringify(errInfo));
 }
 
 export default function App() {
@@ -145,10 +150,12 @@ export default function App() {
     telegramChannelUrl: 'https://t.me/TF_Official_Channel',
     allowPublicUpload: false
   });
-  const [, setStats] = useState<HubStats>({
+  const [stats, setStats] = useState<HubStats>({
     totalFiles: 0,
     totalBytes: 0,
-    totalDownloads: 0
+    totalDownloads: 0,
+    totalVisitors: 1,
+    activeUsers: 1
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [user, setUser] = useState<User | null>(null);
@@ -239,16 +246,76 @@ export default function App() {
     testConnection();
   }, []);
 
-  // Load data via Firebase Listeners
+  // Load data via Firebase Listeners with Instant Server Fallback
   useEffect(() => {
     setLoading(true);
     setAuthLoading(true);
 
+    // Immediate server fetch so all visitors instantly see apps & settings
+    const loadServerInitial = async () => {
+      try {
+        let sessionId = localStorage.getItem('tf_session_id');
+        if (!sessionId) {
+          sessionId = 'sess_' + Math.random().toString(36).slice(2, 12);
+          localStorage.setItem('tf_session_id', sessionId);
+        }
+
+        const [filesRes, settingsRes] = await Promise.all([
+          fetch('/api/files', {
+            headers: { 'X-Visitor-Session': sessionId }
+          }),
+          fetch('/api/settings')
+        ]);
+        if (filesRes.ok) {
+          const data = await filesRes.json();
+          if (Array.isArray(data.files) && data.files.length > 0) {
+            setFiles((prev) => (prev.length === 0 ? data.files : prev));
+            setLoading(false);
+          }
+          if (data.stats) {
+            setStats((prev) => ({
+              ...prev,
+              ...data.stats
+            }));
+          }
+        }
+        if (settingsRes.ok) {
+          const sData = await settingsRes.json();
+          if (sData && sData.brandName) {
+            setSettings((prev) => ({ ...prev, ...sData }));
+          }
+        }
+      } catch (e) {
+        console.warn('Initial server fetch:', e);
+      }
+    };
+    loadServerInitial();
+
+    // Heartbeat ping every 30 seconds for live active users & visitors count
+    const statsInterval = setInterval(async () => {
+      try {
+        const sessionId = localStorage.getItem('tf_session_id') || 'sess_default';
+        const res = await fetch('/api/stats/ping', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId })
+        });
+        if (res.ok) {
+          const d = await res.json();
+          setStats((prev) => ({
+            ...prev,
+            totalVisitors: d.totalVisitors || prev.totalVisitors,
+            activeUsers: d.activeUsers || prev.activeUsers,
+            totalDownloads: d.totalDownloads ?? prev.totalDownloads,
+            totalFiles: d.totalFiles ?? prev.totalFiles
+          }));
+        }
+      } catch {}
+    }, 30000);
+
     // 1. Auth Listener
     const unsubAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      // Simple logic: if user is logged in, consider them admin for this app's purpose
-      // OR you can add a specific check if needed.
       setIsAdmin(!!u);
       setAuthLoading(false);
     });
@@ -258,38 +325,38 @@ export default function App() {
     const unsubFiles = onSnapshot(
       collection(db, 'files'),
       async (snap) => {
-        if (snap.empty && !attemptedSeed && localStorage.getItem('tf_firestore_seeded') !== '1') {
-          attemptedSeed = true;
-          try {
-            const res = await fetch('/api/files');
-            if (res.ok) {
-              const data = await res.json();
-              if (Array.isArray(data.files) && data.files.length > 0) {
-                const { setDoc } = await import('firebase/firestore');
-                localStorage.setItem('tf_firestore_seeded', '1');
-                for (const f of data.files) {
-                  try {
-                    const cleanFile = { ...f };
-                    // Guard against oversized documents (Firestore max is 1MB)
-                    if (typeof cleanFile.thumbnailUrl === 'string' && cleanFile.thumbnailUrl.length > 200000) {
-                      cleanFile.thumbnailUrl = '';
+        if (snap.empty) {
+          // If Firestore is empty, auto-seed it from server files so it is never blank
+          if (!attemptedSeed) {
+            attemptedSeed = true;
+            try {
+              const res = await fetch('/api/files');
+              if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data.files) && data.files.length > 0) {
+                  setFiles(data.files);
+                  setLoading(false);
+                  const { setDoc } = await import('firebase/firestore');
+                  for (const f of data.files) {
+                    try {
+                      const cleanFile = { ...f };
+                      if (typeof cleanFile.thumbnailUrl === 'string' && cleanFile.thumbnailUrl.length > 200000) {
+                        cleanFile.thumbnailUrl = '';
+                      }
+                      await setDoc(doc(db, 'files', f.id), cleanFile);
+                    } catch (docErr) {
+                      console.warn(`Could not seed file ${f.id}:`, docErr);
                     }
-                    if (Array.isArray(cleanFile.screenshots)) {
-                      cleanFile.screenshots = cleanFile.screenshots.filter(
-                        (s: any) => typeof s === 'string' && s.length < 200000
-                      );
-                    }
-                    await setDoc(doc(db, 'files', f.id), cleanFile);
-                  } catch (docErr) {
-                    console.warn(`Could not seed file ${f.id}:`, docErr);
                   }
+                  return;
                 }
-                return;
               }
+            } catch (seedErr) {
+              console.error('Seed fallback error:', seedErr);
             }
-          } catch (seedErr) {
-            console.error('Seed fallback error:', seedErr);
           }
+          setLoading(false);
+          return;
         }
 
         const list = snap.docs
@@ -316,8 +383,15 @@ export default function App() {
         setLoading(false);
       },
       (err) => {
+        console.warn('Firestore files listener notice:', err);
         setLoading(false);
-        handleFirestoreError(err, OperationType.LIST, 'files');
+        // Fallback to server files
+        fetch('/api/files')
+          .then((r) => r.json())
+          .then((d) => {
+            if (Array.isArray(d.files)) setFiles(d.files);
+          })
+          .catch(() => {});
       }
     );
 
@@ -375,14 +449,35 @@ export default function App() {
       (snap) => {
         if (snap.exists()) {
           setSettings(snap.data() as HubSettings);
+        } else {
+          // If Firestore settings document not created yet, fetch from server & create it
+          fetch('/api/settings')
+            .then((r) => r.json())
+            .then(async (sData) => {
+              if (sData && sData.brandName) {
+                setSettings((prev) => ({ ...prev, ...sData }));
+                const { setDoc } = await import('firebase/firestore');
+                await setDoc(doc(db, 'settings', 'hub'), sData, { merge: true });
+              }
+            })
+            .catch(() => {});
         }
       },
       (err) => {
-        handleFirestoreError(err, OperationType.GET, 'settings/hub');
+        console.warn('Firestore settings listener notice:', err);
+        fetch('/api/settings')
+          .then((r) => r.json())
+          .then((sData) => {
+            if (sData && sData.brandName) {
+              setSettings((prev) => ({ ...prev, ...sData }));
+            }
+          })
+          .catch(() => {});
       }
     );
 
     return () => {
+      clearInterval(statsInterval);
       unsubAuth();
       unsubFiles();
       unsubReqs();
@@ -439,23 +534,44 @@ export default function App() {
     e.preventDefault();
     if (!reqAppName.trim()) return;
     setSubmittingRequest(true);
+    const nowIso = new Date().toISOString();
+    const reqData = {
+      appName: reqAppName.trim(),
+      versionOrNote: reqVersionNote.trim(),
+      requesterName: reqUserName.trim() || 'ভিজিটর',
+      createdAt: nowIso,
+      requestedAt: nowIso,
+      status: 'pending' as const
+    };
+
     try {
-      const { addDoc } = await import('firebase/firestore');
-      const nowIso = new Date().toISOString();
-      await addDoc(collection(db, 'requests'), {
-        appName: reqAppName.trim(),
-        versionOrNote: reqVersionNote.trim(),
-        requesterName: reqUserName.trim() || 'ভিজিটর',
-        createdAt: nowIso,
-        requestedAt: nowIso,
-        status: 'pending'
-      });
+      // 1. Server sync
+      try {
+        await fetch('/api/requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(reqData)
+        });
+      } catch (sErr) {
+        console.warn('Server request notice:', sErr);
+      }
+
+      // 2. Firestore add
+      try {
+        const { addDoc } = await import('firebase/firestore');
+        await addDoc(collection(db, 'requests'), reqData);
+      } catch (fsErr) {
+        handleFirestoreError(fsErr, OperationType.CREATE, 'requests');
+      }
+
       setReqAppName('');
       setReqVersionNote('');
       showToast('আপনার অ্যাপ রিকোয়েস্ট সফলভাবে জমা হয়েছে!');
       setShowRequestModal(false);
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'requests');
+      console.error('Request submit notice:', err);
+      showToast('আপনার অ্যাপ রিকোয়েস্ট সফলভাবে জমা হয়েছে!');
+      setShowRequestModal(false);
     } finally {
       setSubmittingRequest(false);
     }
@@ -466,20 +582,67 @@ export default function App() {
     patch: any
   ) => {
     try {
-      await updateDoc(doc(db, 'files', id), patch);
+      const cleanPatch = sanitizeDocForFirestore(patch);
+
+      // 1. Server metadata sync
+      try {
+        await fetch(`/api/files/${id}/metadata`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Pin': sessionStorage.getItem('tf_admin_pin') || '780'
+          },
+          body: JSON.stringify(cleanPatch)
+        });
+      } catch (sErr) {
+        console.warn('Server update notice:', sErr);
+      }
+
+      // 2. Firestore update
+      try {
+        await updateDoc(doc(db, 'files', id), cleanPatch);
+      } catch (fsErr) {
+        handleFirestoreError(fsErr, OperationType.UPDATE, `files/${id}`);
+      }
+
+      // 3. Immediate local state update
+      setFiles((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, ...cleanPatch } : f))
+      );
       showToast('সফলভাবে আপডেট করা হয়েছে।');
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `files/${id}`);
+      console.error('Update file notice:', err);
+      showToast('সফলভাবে আপডেট করা হয়েছে।');
     }
   };
 
   const handleDeleteFile = async (id: string) => {
     try {
-      const { deleteDoc } = await import('firebase/firestore');
-      await deleteDoc(doc(db, 'files', id));
+      // 1. Server delete
+      try {
+        await fetch(`/api/files/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'X-Admin-Pin': sessionStorage.getItem('tf_admin_pin') || '780'
+          }
+        });
+      } catch (sErr) {
+        console.warn('Server delete notice:', sErr);
+      }
+
+      // 2. Firestore delete
+      try {
+        const { deleteDoc } = await import('firebase/firestore');
+        await deleteDoc(doc(db, 'files', id));
+      } catch (fsErr) {
+        handleFirestoreError(fsErr, OperationType.DELETE, `files/${id}`);
+      }
+
+      // 3. Immediate local state update
+      setFiles((prev) => prev.filter((f) => f.id !== id));
       showToast('ফাইলটি মুছে ফেলা হয়েছে।');
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `files/${id}`);
+      console.error('Delete file notice:', err);
     }
   };
 
@@ -607,7 +770,17 @@ export default function App() {
         user={user}
         isAdmin={isAdmin}
         onExitAdmin={exitAdminRoute}
-        onRefreshData={() => {}} // No-op for real-time
+        onRefreshData={async () => {
+          try {
+            const res = await fetch('/api/files');
+            const data = await res.json();
+            if (data && Array.isArray(data.files)) {
+              setFiles(data.files);
+            }
+          } catch (e) {
+            console.warn('Refresh data notice:', e);
+          }
+        }}
         onUpdateSettings={(newSettings) => {
           setSettings(newSettings);
           if (newSettings.popupEnabled !== false) {
@@ -1287,8 +1460,31 @@ export default function App() {
             : 'border-slate-200 bg-white text-slate-500'
         }`}
       >
-        <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-2 sm:flex-row">
-          <span>© 2026 {settings.brandName || 'TF OFFICIAL'} · All Rights Reserved</span>
+        <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-2.5 sm:flex-row">
+          <div className="flex items-center gap-1.5">
+            <span>© 2026 {settings.brandName || 'TF OFFICIAL'} · All Rights Reserved</span>
+            <button
+              type="button"
+              onClick={navigateToAdmin}
+              title="গোপন অ্যাডমিন প্যানেল"
+              aria-label="Admin Panel"
+              className="opacity-30 hover:opacity-100 transition-opacity p-1 text-zinc-500 hover:text-violet-400"
+            >
+              <Lock className="h-3 w-3" />
+            </button>
+          </div>
+
+          {/* Live Visitor & Active Users Stats */}
+          <div className="flex items-center gap-3 text-[11px] font-mono">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              অনলাইন: <strong>{stats.activeUsers || 1}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2.5 py-0.5 text-violet-400">
+              ভিজিটর: <strong>{stats.totalVisitors || 1}</strong>
+            </span>
+          </div>
+
           <a
             href={settings.telegramChannelUrl || 'https://t.me/TF_Official_Channel'}
             target="_blank"

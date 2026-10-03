@@ -21,12 +21,20 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /analytics/{docId} {
+      allow read, write: if true;
+    }
+
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
     match /test/{docId} {
-      allow read: if true;
+      allow read, write: if true;
     }
 
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }

@@ -96,12 +96,15 @@ export interface HubSettings {
   telegramChannelId: string;
   telegramChannelUrl: string;
   allowPublicUpload: boolean;
+  totalVisitors?: number;
 }
 
 export interface HubStats {
   totalFiles: number;
   totalBytes: number;
   totalDownloads: number;
+  totalVisitors?: number;
+  activeUsers?: number;
 }
 
 export const STORE_CATEGORIES: { id: string; label: string }[] = [
