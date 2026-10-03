@@ -284,8 +284,10 @@ const VersionsAndButtonsEditor: React.FC<{
         url: uploaded.url,
         fileName: uploaded.fileName
       });
-    } catch {
-      // ignore
+      alert('ফাইল সফলভাবে আপলোড হয়েছে!');
+    } catch (err: any) {
+      console.error('Button file upload failed:', err);
+      alert(`আপলোড ব্যর্থ হয়েছে: ${err.message || 'Unknown error'}`);
     } finally {
       setUploadingBtnKey(null);
     }
@@ -487,7 +489,7 @@ const VersionsAndButtonsEditor: React.FC<{
                             </span>
                             <input
                               type="file"
-                              accept=".html,.htm,.txt,.json,.png,.jpg,.jpeg,.webp"
+                              accept=".html,.htm,.HTML,.HTM,.txt,.json,.png,.jpg,.jpeg,.webp,text/html,text/plain"
                               className="hidden"
                               onChange={(e) => {
                                 const f = e.target.files?.[0];

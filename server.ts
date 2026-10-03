@@ -800,6 +800,7 @@ async function startServer() {
   app.use('/api/files/:id', express.json({ limit: '50mb' }));
   app.use('/api/requests', express.json({ limit: '5mb' }));
   app.use('/api/reports', express.json({ limit: '5mb' }));
+  app.use('/api/assets/upload', express.raw({ type: '*/*', limit: '100mb' }));
 
   const activeSessions = new Map<string, number>();
 
@@ -994,9 +995,17 @@ async function startServer() {
           return;
         }
         hash.update(chunk);
+        if (!writeStream.write(chunk)) {
+          req.pause();
+          writeStream.once('drain', () => req.resume());
+        }
       });
 
-      req.pipe(writeStream);
+      req.on('end', () => {
+        if (!aborted) {
+          writeStream.end();
+        }
+      });
 
       writeStream.on('finish', () => {
         if (aborted) return;
@@ -1127,28 +1136,28 @@ async function startServer() {
       const storedName = `asset_${crypto.randomBytes(6).toString('hex')}${ext}`;
       const filePath = path.join(FILES_DIR, storedName);
 
-      const writeStream = fs.createWriteStream(filePath);
-      let byteCount = 0;
+      const body = req.body;
+      if (!body || !(body instanceof Buffer) || body.length === 0) {
+        console.error('Asset upload: Empty or missing body buffer');
+        res.status(400).json({ error: 'ফাইলটি খালি বা আপলোড করা যায়নি।' });
+        return;
+      }
 
-      req.on('data', (chunk: Buffer) => {
-        byteCount += chunk.length;
-      });
+      fs.writeFileSync(filePath, body);
 
-      req.pipe(writeStream);
-
-      writeStream.on('finish', () => {
+      if (fs.existsSync(filePath)) {
+        const stats = fs.statSync(filePath);
         const assetUrl = `/api/assets/${storedName}?name=${encodeURIComponent(cleanName)}`;
         res.status(201).json({
           url: assetUrl,
           fileName: cleanName,
-          size: byteCount
+          size: stats.size
         });
-      });
-
-      writeStream.on('error', () => {
-        res.status(500).json({ error: 'ফাইল সংরক্ষণে সমস্যা হয়েছে।' });
-      });
-    } catch {
+      } else {
+        res.status(500).json({ error: 'ফাইলটি ডিস্কে সংরক্ষিত হয়নি।' });
+      }
+    } catch (err) {
+      console.error('Asset upload catch error:', err);
       res.status(500).json({ error: 'ফাইল আপলোড ব্যর্থ হয়েছে।' });
     }
   });
@@ -1158,7 +1167,8 @@ async function startServer() {
     const safeStored = path.basename(String(req.params.storedName || ''));
     const filePath = path.join(FILES_DIR, safeStored);
     if (!fs.existsSync(filePath)) {
-      res.status(404).json({ error: 'ফাইলটি পাওয়া যায়নি।' });
+      console.warn(`Asset not found: ${safeStored} at ${filePath}`);
+      res.status(404).json({ error: `ফাইলটি পাওয়া যায়নি। (ID: ${safeStored})` });
       return;
     }
 

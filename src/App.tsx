@@ -62,7 +62,8 @@ function checkIsAdminRoute(): boolean {
     search.includes('admin780') ||
     search.includes('saruar70809000') ||
     search.includes('admin=true') ||
-    search === '?admin'
+    search === '?admin' ||
+    search === '?admin780'
   );
 }
 
@@ -500,11 +501,14 @@ export default function App() {
 
   const navigateToAdmin = () => {
     try {
+      // Use /admin780 as the primary canonical URL for the admin route as previously requested,
+      // but the app also detects /admin.
       window.history.pushState({}, '', '/admin780');
     } catch {
       window.location.hash = '#/admin780';
     }
     setIsAdminRoute(true);
+    setSearchQuery(''); // Clear search if triggered by search
   };
 
   const exitAdminRoute = () => {
@@ -713,7 +717,14 @@ export default function App() {
     setSearchQuery(val);
     triggerSearchFeedback();
     const clean = val.trim().toLowerCase();
-    if (clean === 'saruar70809000' || clean === 'admin780') {
+    // Support multiple triggers including the new /admin request
+    if (
+      clean === 'saruar70809000' || 
+      clean === 'admin780' || 
+      clean === 'admin' || 
+      clean === '/admin' || 
+      clean === '/admin780'
+    ) {
       navigateToAdmin();
     }
   };
